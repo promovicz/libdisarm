@@ -1,0 +1,8 @@
+# disarm
+bin_PROGRAMS = disarm
+
+disarm_SOURCES = \
+	src/disarm.c \
+	src/arm.c src/arm.h \
+	src/endian.h \
+	src/list.c src/list.h
