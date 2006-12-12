@@ -460,7 +460,8 @@ arm_instr_branch_target(int offset, unsigned int address)
 
 
 void
-arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address)
+arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
+		 char *(*addr_string)(unsigned int addr))
 {
 	int ret;
 
@@ -664,9 +665,13 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address)
 
 		unsigned int target = arm_instr_branch_target(offset, address);
 
-		fprintf(f, "b%s%s\t0x%x",
+		char *targetstr = addr_string(target);
+		if (targetstr == NULL) abort();
+
+		fprintf(f, "b%s%s\t%s",
 			(link ? "l" : ""),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""), target);
+			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			targetstr);
 	} else if (ip->type == ARM_INSTR_TYPE_BKPT) {
 		int imm_hi, imm_lo;
 		ret = arm_instr_get_params(instr, ip, 2, &imm_hi, &imm_lo);
@@ -681,7 +686,10 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address)
 
 		unsigned int target = arm_instr_branch_target(offset, address);
 
-		fprintf(f, "blx\t0x%x", target);
+		char *targetstr = addr_string(target);
+		if (targetstr == NULL) abort();
+
+		fprintf(f, "blx\t%s", targetstr);
 	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_XCHG) {
 		int cond, rm;
 		ret = arm_instr_get_params(instr, ip, 2, &cond, &rm);

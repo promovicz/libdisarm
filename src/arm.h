@@ -170,7 +170,8 @@ unsigned int arm_instr_get_param(arm_instr_t instr,
 int arm_instr_get_params(arm_instr_t instr, const arm_instr_pattern_t *ip,
 			 unsigned int params, ...);
 unsigned int arm_instr_branch_target(int offset, unsigned int address);
-void arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address);
+void arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
+		      char *(*addr_string)(unsigned int addr));
 
 
 #endif /* ! _ARM_H */
