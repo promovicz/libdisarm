@@ -16,24 +16,27 @@
 #include "list.h"
 
 
+typedef unsigned int uint_t;
+
+
 typedef struct {
 	hashtable_elm_t elm;
-	unsigned int addr;
+	uint_t addr;
 	int pre;
 	char *line;
 } annot_elm_t;
 
 typedef struct {
 	hashtable_elm_t elm;
-	unsigned int target;
-	unsigned int source;
+	uint_t target;
+	uint_t source;
 	int cond;
 	int link;
 } ref_elm_t;
 
 typedef struct {
 	hashtable_elm_t elm;
-	unsigned int addr;
+	uint_t addr;
 } bb_elm_t;
 
 typedef enum {
@@ -47,8 +50,8 @@ typedef enum {
 
 typedef struct {
 	list_elm_t elm;
-	unsigned int addr;
-	unsigned int size;
+	uint_t addr;
+	size_t size;
 	list_t subsections;
 	char *name;
 	char *desc;
@@ -63,7 +66,7 @@ static image_section_t root_sect;
 
 
 static char *
-addr_string(unsigned int addr)
+addr_string(uint_t addr)
 {
 	char *addrstr = NULL;
 	int r;
@@ -88,11 +91,12 @@ addr_string(unsigned int addr)
 static int
 annot_read(FILE *f, hashtable_t *annot_ht)
 {
+	int r;
 	char *line = NULL;
 	size_t linelen = 0;
 	ssize_t read;
 
-	unsigned int addr = 0;
+	uint_t addr = 0;
 	int reading_addr = 1;
 	int pre = 1;
 
@@ -126,7 +130,7 @@ annot_read(FILE *f, hashtable_t *annot_ht)
 			annot->line = line;
 
 			hashtable_store(annot_ht, (hashtable_elm_t *)annot,
-					&annot->addr, sizeof(unsigned int));
+					&annot->addr, sizeof(uint_t));
 
 			line = NULL;
 		}
@@ -146,7 +150,7 @@ basic_block_analysis(FILE *f, hashtable_t *bb_ht)
 	if (entry_point == NULL) abort();
 	entry_point->addr = 0x0;
 	hashtable_store(bb_ht, (hashtable_elm_t *)entry_point,
-			&entry_point->addr, sizeof(unsigned int));
+			&entry_point->addr, sizeof(uint_t));
 
 	i = 0;
 	while (1) {
@@ -183,8 +187,7 @@ basic_block_analysis(FILE *f, hashtable_t *bb_ht)
 
 				hashtable_store(bb_ht,
 						(hashtable_elm_t *)bbnext,
-						&bbnext->addr,
-						sizeof(unsigned int));
+						&bbnext->addr, sizeof(uint_t));
 			}
 
 
@@ -195,7 +198,7 @@ basic_block_analysis(FILE *f, hashtable_t *bb_ht)
 
 			hashtable_store(bb_ht,
 					(hashtable_elm_t *)bbtarget,
-					&bbtarget->addr, sizeof(unsigned int));
+					&bbtarget->addr, sizeof(uint_t));
 
 			/* reference */
 			ref_elm_t *ref = malloc(sizeof(ref_elm_t));
@@ -207,7 +210,7 @@ basic_block_analysis(FILE *f, hashtable_t *bb_ht)
 			ref->link = link;
 
 			hashtable_store(&ref_ht, (hashtable_elm_t *)ref,
-					&ref->target, sizeof(unsigned int));
+					&ref->target, sizeof(uint_t));
 		} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_IMM) {
@@ -219,8 +222,7 @@ basic_block_analysis(FILE *f, hashtable_t *bb_ht)
 
 				hashtable_store(bb_ht,
 						(hashtable_elm_t *)bbnext,
-						&bbnext->addr,
-						sizeof(unsigned int));
+						&bbnext->addr, sizeof(uint_t));
 			}
 		} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
 			int load = arm_instr_get_param(instr, ip, 5);
@@ -232,8 +234,7 @@ basic_block_analysis(FILE *f, hashtable_t *bb_ht)
 
 				hashtable_store(bb_ht,
 						(hashtable_elm_t *)bbnext,
-						&bbnext->addr,
-						sizeof(unsigned int));
+						&bbnext->addr, sizeof(uint_t));
 			}
 		}
 
@@ -259,16 +260,16 @@ main(int argc, char *argv[])
 
 
 	/* read annotations */
+	r = hashtable_init(&annot_ht, 1024);
+	if (r < 0) {
+		perror("hashtable_init");
+		exit(EXIT_FAILURE);
+	}
+
 	if (argc >= 3) {
 		FILE *annot_file = fopen(argv[2], "r");
 		if (annot_file == NULL) {
 			perror("fopen");
-			exit(EXIT_FAILURE);
-		}
-
-		r = hashtable_init(&annot_ht, 256);
-		if (r < 0) {
-			perror("hashtable_init");
 			exit(EXIT_FAILURE);
 		}
 
@@ -286,13 +287,13 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	r = hashtable_init(&bb_ht, 256);
+	r = hashtable_init(&bb_ht, 1024);
 	if (r < 0) {
 		perror("hashtable_init");
 		exit(EXIT_FAILURE);
 	}
 
-	r = hashtable_init(&ref_ht, 256);
+	r = hashtable_init(&ref_ht, 1024);
 	if (r < 0) {
 		perror("hashtable_init");
 		exit(EXIT_FAILURE);
@@ -328,8 +329,7 @@ main(int argc, char *argv[])
 		while (1) {
 			/* basic block */
 			bb_elm_t *bb = (bb_elm_t *)
-				hashtable_lookup(&bb_ht, &i,
-						 sizeof(unsigned int));
+				hashtable_lookup(&bb_ht, &i, sizeof(uint_t));
 			if (bb == NULL) break;
 
 			if (!bb_begin) {
@@ -337,15 +337,14 @@ main(int argc, char *argv[])
 				if (i > 0) printf("\n");
 			}
 
-			list_elm_remove((list_elm_t *)bb);
+			hashtable_remove_elm(&bb_ht, (hashtable_elm_t *)bb);
 			free(bb);
 		}
 
 		while (1) {
 			/* references */
 			ref_elm_t *ref = (ref_elm_t *)
-				hashtable_lookup(&ref_ht, &i,
-						 sizeof(unsigned int));
+				hashtable_lookup(&ref_ht, &i, sizeof(uint_t));
 			if (ref == NULL) break;
 
 			if (!ref_begin) {
@@ -360,7 +359,7 @@ main(int argc, char *argv[])
 			       (ref->cond ? "C" : "U"),
 			       (ref->link ? "L" : ""));
 
-			list_elm_remove((list_elm_t *)ref);
+			hashtable_remove_elm(&ref_ht, (hashtable_elm_t *)ref);
 			free(ref);
 		}
 		if (ref_begin) printf("\n");
@@ -371,10 +370,11 @@ main(int argc, char *argv[])
 			/* pre annotations */
 			annot_elm_t *annot = (annot_elm_t *)
 				hashtable_lookup(&annot_ht, &i,
-						 sizeof(unsigned int));
+						 sizeof(uint_t));
 			if (annot == NULL) break;
 
-			list_elm_remove((list_elm_t *)annot);
+			hashtable_remove_elm(&annot_ht,
+					     (hashtable_elm_t *)annot);
 
 			if (annot->pre) {
 				printf("; %s", annot->line);
@@ -403,6 +403,10 @@ main(int argc, char *argv[])
 		i += sizeof(arm_instr_t);
 	}
 
+	/* clean up */
+	hashtable_deinit(&annot_ht);
+	hashtable_deinit(&bb_ht);
+	hashtable_deinit(&ref_ht);
 
 #if 0
 	/* inter translate instructions */

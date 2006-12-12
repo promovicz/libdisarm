@@ -29,7 +29,7 @@
 #include <errno.h>
 
 #include "hashtable.h"
-#include "list.h"
+#include "slist.h"
 
 
 static uint32_t
@@ -57,29 +57,39 @@ hashtable_init(hashtable_t *ht, size_t size)
 {
 	ht->size = size;
 
-	ht->elms = (list_t *)malloc(sizeof(list_t)*size);
+	ht->elms = (slist_t *)calloc(size, sizeof(slist_t));
 	if (ht->elms == NULL) {
 		errno = ENOMEM;
 		return -1;
 	}
 
-	for (size_t i = 0; i < size; i++) {
-		list_init(&ht->elms[i]);
-	}
+	return 0;
+}
+
+void
+hashtable_deinit(hashtable_t *ht)
+{
+	free(ht->elms);
+}
+
+static slist_t *
+hashtable_lookup_bucket(hashtable_t *ht, const void *key, size_t len)
+{
+	uint32_t hash = joaat_hash(key, len);
+	return &ht->elms[hash % ht->size];
 }
 
 hashtable_elm_t *
 hashtable_lookup(hashtable_t *ht, const void *key, size_t len)
 {
-	uint32_t hash = joaat_hash(key, len);
-	list_t *bucket = &ht->elms[hash % ht->size];
+	slist_t *bucket = hashtable_lookup_bucket(ht, key, len);
 
-	list_elm_t *elm;
-	list_foreach(*bucket, elm) {
+	slist_elm_t *elm, *preelm;
+	slist_foreach(bucket, elm, preelm) {
 		hashtable_elm_t *helm = (hashtable_elm_t *)elm;
 		if (len == helm->len && !memcmp(key, helm->key, len)) {
-			list_elm_remove(elm);
-			list_prepend(bucket, elm);
+			slist_elm_remove(elm, preelm);
+			slist_prepend(bucket, elm);
 			return helm;
 		}
 	}
@@ -92,10 +102,26 @@ hashtable_store(hashtable_t *ht, hashtable_elm_t *helm,
 		const void *key, size_t len)
 {
 	uint32_t hash = joaat_hash(key, len);
-	list_t *bucket = &ht->elms[hash % ht->size];
+	slist_t *bucket = &ht->elms[hash % ht->size];
 
 	helm->key = key;
 	helm->len = len;
 
-	list_prepend(bucket, (list_elm_t *)helm);
+	slist_prepend(bucket, (slist_elm_t *)helm);
+}
+
+void
+hashtable_remove_elm(hashtable_t *ht, hashtable_elm_t *helm)
+{
+	slist_t *bucket = hashtable_lookup_bucket(ht, helm->key, helm->len);
+
+	slist_elm_t *elm, *preelm;
+	slist_foreach(bucket, elm, preelm) {
+		hashtable_elm_t *loop_helm = (hashtable_elm_t *)elm;
+		if (helm->len == loop_helm->len &&
+		    !memcmp(helm->key, loop_helm->key, helm->len)) {
+			slist_elm_remove(elm, preelm);
+			return;
+		}
+	}
 }

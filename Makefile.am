@@ -7,4 +7,5 @@ disarm_SOURCES = \
 	src/endian.h \
 	src/hashtable.c src/hashtable.h \
 	src/inter.c src/inter.h \
-	src/list.c src/list.h
+	src/list.c src/list.h \
+	src/slist.c src/slist.h
