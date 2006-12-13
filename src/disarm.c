@@ -24,6 +24,7 @@ typedef struct {
 	uint_t addr;
 	int pre;
 	char *line;
+	size_t linelen;
 } annot_elm_t;
 
 typedef struct {
@@ -89,7 +90,7 @@ addr_string(uint_t addr)
 }
 
 static int
-annot_read(FILE *f, hashtable_t *annot_ht)
+annot_read(FILE *f)
 {
 	int r;
 	char *line = NULL;
@@ -122,17 +123,36 @@ annot_read(FILE *f, hashtable_t *annot_ht)
 		} else if (!strcmp(line, "--\n")) {
 			pre = 0;
 		} else {
-			annot_elm_t *annot = malloc(sizeof(annot_elm_t));
-			if (annot == NULL) abort();
+			annot_elm_t *annot = (annot_elm_t *)
+				hashtable_lookup(&annot_ht, &addr,
+						 sizeof(uint_t));
 
-			annot->addr = addr;
-			annot->pre = pre;
-			annot->line = line;
+			if (annot == NULL || annot->pre != pre) {
+				annot = (annot_elm_t *)
+					malloc(sizeof(annot_elm_t));
+				if (annot == NULL) abort();
 
-			hashtable_store(annot_ht, (hashtable_elm_t *)annot,
-					&annot->addr, sizeof(uint_t));
+				annot->addr = addr;
+				annot->pre = pre;
+				annot->line = line;
+				annot->linelen = read;
 
-			line = NULL;
+				line = NULL;
+
+				hashtable_store(&annot_ht,
+						(hashtable_elm_t *)annot,
+						&annot->addr, sizeof(uint_t));
+			} else {
+				annot->line =
+					realloc(annot->line,
+						annot->linelen + read + 1);
+				if (annot->line == NULL) abort();
+
+				memcpy(&annot->line[annot->linelen],
+				       line, read);
+				annot->linelen += read;
+				annot->line[annot->linelen] = '\0';
+			}
 		}
 	}
 
@@ -141,15 +161,30 @@ annot_read(FILE *f, hashtable_t *annot_ht)
 	return 0;
 }
 
+static void
+basic_block_add(uint_t addr)
+{
+	hashtable_elm_t *helm = hashtable_lookup(&bb_ht,
+						 &addr, sizeof(uint_t));
+	if (helm == NULL) {
+		bb_elm_t *bb = malloc(sizeof(bb_elm_t));
+		if (bb == NULL) abort();
+		bb->addr = addr;
+
+		hashtable_store(&bb_ht, (hashtable_elm_t *)bb,
+				&bb->addr, sizeof(uint_t));
+	}
+}
+
 static int
-basic_block_analysis(FILE *f, hashtable_t *bb_ht)
+basic_block_analysis(FILE *f)
 {
 	int r, i;
 
 	bb_elm_t *entry_point = malloc(sizeof(bb_elm_t));
 	if (entry_point == NULL) abort();
 	entry_point->addr = 0x0;
-	hashtable_store(bb_ht, (hashtable_elm_t *)entry_point,
+	hashtable_store(&bb_ht, (hashtable_elm_t *)entry_point,
 			&entry_point->addr, sizeof(uint_t));
 
 	i = 0;
@@ -180,25 +215,10 @@ basic_block_analysis(FILE *f, hashtable_t *bb_ht)
 
 
 			/* basic block for fall-through */
-			if (!link) {
-				bb_elm_t *bbnext = malloc(sizeof(bb_elm_t));
-				if (bbnext == NULL) abort();
-				bbnext->addr = i + sizeof(arm_instr_t);
-
-				hashtable_store(bb_ht,
-						(hashtable_elm_t *)bbnext,
-						&bbnext->addr, sizeof(uint_t));
-			}
-
+			basic_block_add(i + sizeof(arm_instr_t));
 
 			/* basic block for branch target */
-			bb_elm_t *bbtarget = malloc(sizeof(bb_elm_t));
-			if (bbtarget == NULL) abort();
-			bbtarget->addr = target;
-
-			hashtable_store(bb_ht,
-					(hashtable_elm_t *)bbtarget,
-					&bbtarget->addr, sizeof(uint_t));
+			basic_block_add(target);
 
 			/* reference */
 			ref_elm_t *ref = malloc(sizeof(ref_elm_t));
@@ -215,26 +235,12 @@ basic_block_analysis(FILE *f, hashtable_t *bb_ht)
 			   ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_IMM) {
 			int rd = arm_instr_get_param(instr, ip, 4);
-			if (rd == 15) {
-				bb_elm_t *bbnext = malloc(sizeof(bb_elm_t));
-				if (bbnext == NULL) abort();
-				bbnext->addr = i + sizeof(arm_instr_t);
-
-				hashtable_store(bb_ht,
-						(hashtable_elm_t *)bbnext,
-						&bbnext->addr, sizeof(uint_t));
-			}
+			if (rd == 15) basic_block_add(i + sizeof(arm_instr_t));
 		} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
 			int load = arm_instr_get_param(instr, ip, 5);
 			int reglist = arm_instr_get_param(instr, ip, 7);
 			if (load && (reglist & (1 << 15))) {
-				bb_elm_t *bbnext = malloc(sizeof(bb_elm_t));
-				if (bbnext == NULL) abort();
-				bbnext->addr = i + sizeof(arm_instr_t);
-
-				hashtable_store(bb_ht,
-						(hashtable_elm_t *)bbnext,
-						&bbnext->addr, sizeof(uint_t));
+				basic_block_add(i + sizeof(arm_instr_t));
 			}
 		}
 
@@ -273,7 +279,7 @@ main(int argc, char *argv[])
 			exit(EXIT_FAILURE);
 		}
 
-		r = annot_read(annot_file, &annot_ht);
+		r = annot_read(annot_file);
 		if (r < 0) {
 			fprintf(stderr, "Unable to read annotations.\n");
 			exit(EXIT_FAILURE);
@@ -299,7 +305,7 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	r = basic_block_analysis(bin_file, &bb_ht);
+	r = basic_block_analysis(bin_file);
 	if (r < 0) {
 		fprintf(stderr, "Unable to finish basic block analysis.\n");
 		exit(EXIT_FAILURE);
@@ -377,7 +383,16 @@ main(int argc, char *argv[])
 					     (hashtable_elm_t *)annot);
 
 			if (annot->pre) {
-				printf("; %s", annot->line);
+				char *line = annot->line;
+				size_t linelen = annot->linelen;
+				while (1) {
+					char *nl = memchr(line, '\n',
+							  linelen);
+					if (nl == NULL) break;
+					printf("; %.*s\n", nl - line, line);
+					linelen -= nl - line - 1;
+					line = nl + 1;
+				}
 				free(annot->line);
 				free(annot);
 			} else {
@@ -395,7 +410,15 @@ main(int argc, char *argv[])
 			annot_elm_t *annot = (annot_elm_t *)
 				list_remove_head(&post_annot_list);
 
-			printf("; %s", annot->line);
+			char *line = annot->line;
+			size_t linelen = annot->linelen;
+			while (1) {
+				char *nl = memchr(line, '\n', linelen);
+				if (nl == NULL) break;
+				printf("; %.*s\n", nl - line, line);
+				linelen -= nl - line - 1;
+				line = nl + 1;
+			}
 			free(annot->line);
 			free(annot);
 		}
