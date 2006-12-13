@@ -34,18 +34,20 @@ typedef struct {
 } hashtable_elm_t;
 
 typedef struct {
-	size_t size;
 	slist_t *elms;
+	size_t size;
+	size_t load;
 } hashtable_t;
 
 
 int hashtable_init(hashtable_t *ht, size_t size);
 void hashtable_deinit(hashtable_t *ht);
+int hashtable_rehash(hashtable_t *ht, size_t size);
 hashtable_elm_t *hashtable_lookup(hashtable_t *ht,
 				  const void *key, size_t len);
-void hashtable_store(hashtable_t *ht, hashtable_elm_t *helm,
+int hashtable_insert(hashtable_t *ht, hashtable_elm_t *helm,
 		     const void *key, size_t len);
-void hashtable_remove_elm(hashtable_t *ht, hashtable_elm_t *helm);
+int hashtable_remove(hashtable_t *ht, hashtable_elm_t *helm);
 
 
 #endif /* ! _HASHTABLE_H */

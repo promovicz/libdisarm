@@ -23,8 +23,8 @@ typedef struct {
 	hashtable_elm_t elm;
 	uint_t addr;
 	int pre;
-	char *line;
-	size_t linelen;
+	char *text;
+	size_t textlen;
 } annot_elm_t;
 
 typedef struct {
@@ -40,30 +40,16 @@ typedef struct {
 	uint_t addr;
 } bb_elm_t;
 
-typedef enum {
-	SECT_TYPE_UNKNOWN = 0,
-	SECT_TYPE_DATA,
-	SECT_TYPE_LIT_POOL,
-	SECT_TYPE_CODE,
-	SECT_TYPE_FUNC,
-	SECT_TYPE_MAX
-} section_type_t;
-
 typedef struct {
 	list_elm_t elm;
-	uint_t addr;
-	size_t size;
-	list_t subsections;
-	char *name;
-	char *desc;
-	section_type_t type;
-} image_section_t;
+	FILE *file;
+	hashtable_t annot_ht;
+} image_t;
 
 
-static hashtable_t annot_ht;
 static hashtable_t ref_ht;
 static hashtable_t bb_ht;
-static image_section_t root_sect;
+static list_t image_list = LIST_INIT(image_list);
 
 
 static char *
@@ -90,73 +76,99 @@ addr_string(uint_t addr)
 }
 
 static int
-annot_read(FILE *f)
+image_add_annot(image_t *image, uint_t addr,
+		char *text, size_t textlen, int pre)
 {
 	int r;
-	char *line = NULL;
-	size_t linelen = 0;
+	hashtable_t *annot_ht = &image->annot_ht;
+	annot_elm_t *annot = (annot_elm_t *)
+		hashtable_lookup(annot_ht, &addr, sizeof(uint_t));
+
+	if (annot == NULL || annot->pre != pre) {
+		annot = (annot_elm_t *)malloc(sizeof(annot_elm_t));
+		if (annot == NULL) {
+			errno = ENOMEM;
+			return -1;
+		}
+
+		annot->addr = addr;
+		annot->pre = pre;
+		annot->text = text;
+		annot->textlen = textlen;
+
+		r = hashtable_insert(annot_ht, (hashtable_elm_t *)annot,
+				     &annot->addr, sizeof(uint_t));
+		if (r < 0) {
+			perror("hashtable_insert");
+			exit(EXIT_FAILURE);
+		}
+	} else {
+		annot->text = realloc(annot->text,
+				      annot->textlen + textlen + 1);
+		if (annot->text == NULL) {
+			errno = ENOMEM;
+			return -1;
+		}
+
+		memcpy(&annot->text[annot->textlen], text, textlen);
+		annot->textlen += textlen;
+		annot->text[annot->textlen] = '\0';
+
+		free(text);
+	}
+
+	return 0;
+}
+
+static int
+image_add_annot_from_file(image_t *image, FILE *f)
+{
+	int r;
+	char *text = NULL;
+	size_t textlen = 0;
 	ssize_t read;
 
 	uint_t addr = 0;
 	int reading_addr = 1;
 	int pre = 1;
 
-	while ((read = getline(&line, &linelen, f)) != -1) {
-		if (read == 0 || !strcmp(line, "\n")) {
+	hashtable_t *annot_ht = &image->annot_ht;
+
+	while ((read = getline(&text, &textlen, f)) != -1) {
+		if (read == 0 || !strcmp(text, "\n")) {
 			reading_addr = 1;
 		} else if (reading_addr) {
 			errno = 0;
 			char *endptr;
-			addr = strtol(line, &endptr, 16);
+			addr = strtol(text, &endptr, 16);
 
 			if ((errno == ERANGE &&
 			     (addr == LONG_MAX || addr == LONG_MIN))
 			    || (errno != 0 && addr == 0)
-			    || (endptr == line)) {
-				free(line);
+			    || (endptr == text)) {
+				free(text);
 				fprintf(stderr, "Unable to parse address.\n");
 				return -1;
 			}
 
 			reading_addr = 0;
 			pre = 1;
-		} else if (!strcmp(line, "--\n")) {
+		} else if (!strcmp(text, "--\n")) {
 			pre = 0;
 		} else {
-			annot_elm_t *annot = (annot_elm_t *)
-				hashtable_lookup(&annot_ht, &addr,
-						 sizeof(uint_t));
-
-			if (annot == NULL || annot->pre != pre) {
-				annot = (annot_elm_t *)
-					malloc(sizeof(annot_elm_t));
-				if (annot == NULL) abort();
-
-				annot->addr = addr;
-				annot->pre = pre;
-				annot->line = line;
-				annot->linelen = read;
-
-				line = NULL;
-
-				hashtable_store(&annot_ht,
-						(hashtable_elm_t *)annot,
-						&annot->addr, sizeof(uint_t));
-			} else {
-				annot->line =
-					realloc(annot->line,
-						annot->linelen + read + 1);
-				if (annot->line == NULL) abort();
-
-				memcpy(&annot->line[annot->linelen],
-				       line, read);
-				annot->linelen += read;
-				annot->line[annot->linelen] = '\0';
+			r = image_add_annot(image, addr, text, read, pre);
+			if (r < 0) {
+				if (errno == ENOMEM) abort();
+				else {
+					perror("image_add_annot");
+					return -1;
+				}
 			}
+			text = NULL;
 		}
 	}
 
-	if (line) free(line);
+	if (text) free(text);
 
 	return 0;
 }
@@ -164,6 +176,7 @@ annot_read(FILE *f)
 static void
 basic_block_add(uint_t addr)
 {
+	int r;
 	hashtable_elm_t *helm = hashtable_lookup(&bb_ht,
 						 &addr, sizeof(uint_t));
 	if (helm == NULL) {
@@ -171,28 +184,42 @@ basic_block_add(uint_t addr)
 		if (bb == NULL) abort();
 		bb->addr = addr;
 
-		hashtable_store(&bb_ht, (hashtable_elm_t *)bb,
-				&bb->addr, sizeof(uint_t));
+		r = hashtable_insert(&bb_ht, (hashtable_elm_t *)bb,
+				     &bb->addr, sizeof(uint_t));
+		if (r < 0) {
+			perror("hashtable_insert");
+			exit(EXIT_FAILURE);
+		}
 	}
 }
 
 static int
-basic_block_analysis(FILE *f)
+basic_block_analysis(image_t *image)
 {
 	int r, i;
+
+	r = fseeko(image->file, 0, SEEK_SET);
+	if (r < 0) {
+		perror("fseeko");
+		exit(EXIT_FAILURE);
+	}
 
 	bb_elm_t *entry_point = malloc(sizeof(bb_elm_t));
 	if (entry_point == NULL) abort();
 	entry_point->addr = 0x0;
-	hashtable_store(&bb_ht, (hashtable_elm_t *)entry_point,
-			&entry_point->addr, sizeof(uint_t));
+	r = hashtable_insert(&bb_ht, (hashtable_elm_t *)entry_point,
+			     &entry_point->addr, sizeof(uint_t));
+	if (r < 0) {
+		perror("hashtable_insert");
+		exit(EXIT_FAILURE);
+	}
 
 	i = 0;
 	while (1) {
 		arm_instr_t instr;
-		r = fread(&instr, sizeof(arm_instr_t), 1, f);
+		r = fread(&instr, sizeof(arm_instr_t), 1, image->file);
 		if (r < 1) {
-			if (feof(f)) break;
+			if (feof(image->file)) break;
 			return -1;
 		}
 
@@ -229,8 +256,12 @@ basic_block_analysis(FILE *f)
 			ref->cond = (cond != ARM_COND_AL);
 			ref->link = link;
 
-			hashtable_store(&ref_ht, (hashtable_elm_t *)ref,
-					&ref->target, sizeof(uint_t));
+			r = hashtable_insert(&ref_ht, (hashtable_elm_t *)ref,
+					     &ref->target, sizeof(uint_t));
+			if (r < 0) {
+				perror("hashtable_insert");
+				exit(EXIT_FAILURE);
+			}
 		} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_IMM) {
@@ -250,6 +281,34 @@ basic_block_analysis(FILE *f)
 	return 0;
 }
 
+static image_t *
+image_new(const char *filename)
+{
+	int r;
+
+	image_t *image = (image_t *)malloc(sizeof(image_t));
+	if (image == NULL) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	image->file = fopen(filename, "rb");
+	if (image->file == NULL) return NULL;
+
+	r = hashtable_init(&image->annot_ht, 0);
+	if (r < 0) return NULL;
+
+	return image;
+}
+
+static void
+image_free(image_t *image)
+{
+	hashtable_deinit(&image->annot_ht);
+	fclose(image->file);
+	free(image);
+}
+
 
 int
 main(int argc, char *argv[])
@@ -258,20 +317,13 @@ main(int argc, char *argv[])
 
 	if (argc < 2) return EXIT_FAILURE;
 
-	FILE *bin_file = fopen(argv[1], "rb");
-	if (bin_file == NULL) {
-		perror("fopen");
+	image_t *image = image_new(argv[1]);
+	if (image == NULL) {
+		perror("image_new");
 		exit(EXIT_FAILURE);
 	}
-
 
 	/* read annotations */
-	r = hashtable_init(&annot_ht, 1024);
-	if (r < 0) {
-		perror("hashtable_init");
-		exit(EXIT_FAILURE);
-	}
-
 	if (argc >= 3) {
 		FILE *annot_file = fopen(argv[2], "r");
 		if (annot_file == NULL) {
@@ -279,40 +331,34 @@ main(int argc, char *argv[])
 			exit(EXIT_FAILURE);
 		}
 
-		r = annot_read(annot_file);
+		r = image_add_annot_from_file(image, annot_file);
 		if (r < 0) {
-			fprintf(stderr, "Unable to read annotations.\n");
+			perror("image_add_annot_from_file");
 			exit(EXIT_FAILURE);
 		}
 	}
 
 	/* basic block analysis */
-	r = fseek(bin_file, 0, SEEK_SET);
-	if (r < 0) {
-		perror("fseeko");
-		exit(EXIT_FAILURE);
-	}
-
-	r = hashtable_init(&bb_ht, 1024);
+	r = hashtable_init(&bb_ht, 0);
 	if (r < 0) {
 		perror("hashtable_init");
 		exit(EXIT_FAILURE);
 	}
 
-	r = hashtable_init(&ref_ht, 1024);
+	r = hashtable_init(&ref_ht, 0);
 	if (r < 0) {
 		perror("hashtable_init");
 		exit(EXIT_FAILURE);
 	}
 
-	r = basic_block_analysis(bin_file);
+	r = basic_block_analysis(image);
 	if (r < 0) {
 		fprintf(stderr, "Unable to finish basic block analysis.\n");
 		exit(EXIT_FAILURE);
 	}
 
 	/* print instructions */
-	r = fseek(bin_file, 0, SEEK_SET);
+	r = fseeko(image->file, 0, SEEK_SET);
 	if (r < 0) {
 		perror("fseeko");
 		exit(EXIT_FAILURE);
@@ -321,9 +367,9 @@ main(int argc, char *argv[])
 	i = 0;
 	while (1) {
 		arm_instr_t instr;
-		r = fread(&instr, sizeof(arm_instr_t), 1, bin_file);
+		r = fread(&instr, sizeof(arm_instr_t), 1, image->file);
 		if (r < 1) {
-			if (feof(bin_file)) break;
+			if (feof(image->file)) break;
 			perror("fread");
 			exit(EXIT_FAILURE);
 		}
@@ -343,7 +389,12 @@ main(int argc, char *argv[])
 				if (i > 0) printf("\n");
 			}
 
-			hashtable_remove_elm(&bb_ht, (hashtable_elm_t *)bb);
+			r = hashtable_remove(&bb_ht, (hashtable_elm_t *)bb);
+			if (r < 0) {
+				perror("hashtable_remove");
+				exit(EXIT_FAILURE);
+			}
+
 			free(bb);
 		}
 
@@ -365,7 +416,12 @@ main(int argc, char *argv[])
 			       (ref->cond ? "C" : "U"),
 			       (ref->link ? "L" : ""));
 
-			hashtable_remove_elm(&ref_ht, (hashtable_elm_t *)ref);
+			r = hashtable_remove(&ref_ht, (hashtable_elm_t *)ref);
+			if (r < 0) {
+				perror("hashtable_remove");
+				exit(EXIT_FAILURE);
+			}
+
 			free(ref);
 		}
 		if (ref_begin) printf("\n");
@@ -375,25 +431,29 @@ main(int argc, char *argv[])
 		while (1) {
 			/* pre annotations */
 			annot_elm_t *annot = (annot_elm_t *)
-				hashtable_lookup(&annot_ht, &i,
+				hashtable_lookup(&image->annot_ht, &i,
 						 sizeof(uint_t));
 			if (annot == NULL) break;
 
-			hashtable_remove_elm(&annot_ht,
+			r = hashtable_remove(&image->annot_ht,
 					     (hashtable_elm_t *)annot);
+			if (r < 0) {
+				perror("hashtable_remove");
+				exit(EXIT_FAILURE);
+			}
 
 			if (annot->pre) {
-				char *line = annot->line;
-				size_t linelen = annot->linelen;
+				char *text = annot->text;
+				size_t textlen = annot->textlen;
 				while (1) {
-					char *nl = memchr(line, '\n',
-							  linelen);
+					char *nl = memchr(text, '\n',
+							  textlen);
 					if (nl == NULL) break;
-					printf("; %.*s\n", nl - line, line);
-					linelen -= nl - line - 1;
-					line = nl + 1;
+					printf("; %.*s\n", nl - text, text);
+					textlen -= nl - text - 1;
+					text = nl + 1;
 				}
-				free(annot->line);
+				free(annot->text);
 				free(annot);
 			} else {
 				list_append(&post_annot_list,
@@ -410,16 +470,16 @@ main(int argc, char *argv[])
 			annot_elm_t *annot = (annot_elm_t *)
 				list_remove_head(&post_annot_list);
 
-			char *line = annot->line;
-			size_t linelen = annot->linelen;
+			char *text = annot->text;
+			size_t textlen = annot->textlen;
 			while (1) {
-				char *nl = memchr(line, '\n', linelen);
+				char *nl = memchr(text, '\n', textlen);
 				if (nl == NULL) break;
-				printf("; %.*s\n", nl - line, line);
-				linelen -= nl - line - 1;
-				line = nl + 1;
+				printf("; %.*s\n", nl - text, text);
+				textlen -= nl - text - 1;
+				text = nl + 1;
 			}
-			free(annot->line);
+			free(annot->text);
 			free(annot);
 		}
 
@@ -427,38 +487,10 @@ main(int argc, char *argv[])
 	}
 
 	/* clean up */
-	hashtable_deinit(&annot_ht);
+	image_free(image);
 	hashtable_deinit(&bb_ht);
 	hashtable_deinit(&ref_ht);
 
-#if 0
-	/* inter translate instructions */
-	r = fseek(bin_file, 0, SEEK_SET);
-	if (r < 0) {
-		perror("fseeko");
-		exit(EXIT_FAILURE);
-	}
-
-	inter_context_t *ctx = inter_new_context();
-
-	i = 0;
-	while (1) {
-		arm_instr_t instr;
-		r = fread(&instr, sizeof(arm_instr_t), 1, bin_file);
-		if (r < 1) {
-			if (feof(bin_file)) break;
-			perror("fread");
-			exit(EXIT_FAILURE);
-		}
-
-		instr = htobe32(instr);
-		inter_arm_append(ctx, instr, i);
-
-		i += sizeof(arm_instr_t);
-	}
-
-	inter_fprint(stdout, ctx);
-#endif
 
 	return EXIT_SUCCESS;
 }

@@ -16,14 +16,23 @@ AC_PROG_CC_C99
 # Checks for header files.
 AC_HEADER_STDC
 AC_HEADER_ASSERT
-AC_CHECK_HEADERS([stdint.h stdlib.h])
+AC_CHECK_HEADERS([limits.h stdint.h stdlib.h string.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
+AC_SYS_LARGEFILE
+AC_TYPE_OFF_T
+AC_TYPE_SIZE_T
+AC_TYPE_SSIZE_T
+AC_TYPE_UINT8_T
 AC_TYPE_UINT32_T
 
 # Checks for library functions.
+AC_FUNC_FSEEKO
 AC_FUNC_MALLOC
+AC_FUNC_MEMCMP
+AC_FUNC_REALLOC
+AC_CHECK_FUNCS([memchr strtol])
 
 AC_CONFIG_FILES([
 	Makefile

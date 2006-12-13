@@ -55,6 +55,7 @@ void slist_init(slist_t *list);
 slist_elm_t *slist_head(slist_t *list);
 void slist_prepend(slist_t *list, slist_elm_t *elm);
 void slist_elm_remove(slist_elm_t *elm, slist_elm_t *preelm);
+slist_elm_t *slist_remove_head(slist_t *list);
 int slist_is_empty(slist_t *list);
 
 
