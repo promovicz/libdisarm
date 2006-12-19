@@ -28,12 +28,12 @@
     .tail = (list_elm_t *)&((list).head) }
 
 #define list_foreach(list,elm)  \
-  for ((elm) = (list).head; \
+  for ((elm) = (list)->head; \
        (elm)->next != NULL; \
        (elm) = (elm)->next)
 
 #define list_foreach_safe(list,elm,tmpelm)  \
-  for ((elm) = (list).head, (tmpelm) = (elm)->next; \
+  for ((elm) = (list)->head, (tmpelm) = (elm)->next; \
        (tmpelm) != NULL; \
        (elm) = (tmpelm), (tmpelm) = (elm)->next)
 

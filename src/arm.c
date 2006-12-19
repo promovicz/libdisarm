@@ -407,7 +407,7 @@ arm_instr_get_instr_pattern(arm_instr_t instr)
 }
 
 const arm_param_pattern_t *
-arm_instr_get_param_pattern(const arm_instr_pattern_t *ip, unsigned int param)
+arm_instr_get_param_pattern(const arm_instr_pattern_t *ip, uint_t param)
 {
 	if (ip->param == NULL) return NULL;
 
@@ -418,9 +418,9 @@ arm_instr_get_param_pattern(const arm_instr_pattern_t *ip, unsigned int param)
 	return pp;
 }
 
-unsigned int
+uint_t
 arm_instr_get_param(arm_instr_t instr,
-		    const arm_instr_pattern_t *ip, unsigned int param)
+		    const arm_instr_pattern_t *ip, uint_t param)
 {
 	const arm_param_pattern_t *pp = &ip->param[param];
 	return (instr & pp->mask) >> pp->shift;
@@ -428,7 +428,7 @@ arm_instr_get_param(arm_instr_t instr,
 
 int
 arm_instr_get_params(arm_instr_t instr, const arm_instr_pattern_t *ip,
-		     unsigned int params, ...)
+		     uint_t params, ...)
 {
 	va_list ap;
 	va_start(ap, params);
@@ -449,19 +449,19 @@ arm_instr_get_params(arm_instr_t instr, const arm_instr_pattern_t *ip,
 	return 0;
 }
 
-unsigned int
-arm_instr_branch_target(int offset, unsigned int address)
+arm_addr_t
+arm_instr_branch_target(int offset, arm_addr_t addr)
 {
 	if (offset & 0x800000) {
 		offset = -1 * (((~offset) + 1) & 0xffffff);
 	}
-	return (offset << 2) + address + 0x8;
+	return (offset << 2) + addr + 0x8;
 }
 
 
 void
-arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
-		 char *(*addr_string)(unsigned int addr))
+arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
+		 char *(*addr_string)(arm_addr_t addr))
 {
 	int ret;
 
@@ -547,7 +547,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
 			fprintf(f, "r%d, r%d", rd, rn);
 		}
 
-		unsigned int rot_imm =
+		uint_t rot_imm =
 			(imm >> (rot << 1)) | (imm << (32 - (rot << 1)));
 
 		fprintf(f, ", #%s%x", (rot_imm < 10 ? "" : "0x"), rot_imm);
@@ -584,7 +584,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
 			((mask & 2) ? "x" : ""), ((mask & 4) ? "s" : ""),
 			((mask & 8) ? "f" : ""));
 
-		unsigned int rot_imm =
+		uint_t rot_imm =
 			(imm >> (rot << 1)) | (imm << (32 - (rot << 1)));
 
 		fprintf(f, ", #%s%x", (rot_imm < 10 ? "" : "0x"), rot_imm);
@@ -628,6 +628,15 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
 		}
 
 		if (p) fprintf(f, "]%s", (w ? "!" : ""));
+
+		if (rn == 15) {
+			int off = imm * (u ? 1 : -1);
+			char *targetstr = addr_string(addr + 8 + off);
+			if (targetstr == NULL) abort();
+
+			fprintf(f, "\t; %s", targetstr);
+			free(targetstr);
+		}
 	} else if (ip->type == ARM_INSTR_TYPE_LS_REG_OFF) {
 		int cond, p, u, b, w, load, rn, rd, sha, sh, rm;
 		ret = arm_instr_get_params(instr, ip, 11, &cond, &p, &u, &b,
@@ -663,7 +672,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
 					   &offset);
 		if (ret < 0) abort();
 
-		unsigned int target = arm_instr_branch_target(offset, address);
+		unsigned int target = arm_instr_branch_target(offset, addr);
 
 		char *targetstr = addr_string(target);
 		if (targetstr == NULL) abort();
@@ -672,6 +681,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
 			(link ? "l" : ""),
 			(cond != ARM_COND_AL ? cond_map[cond] : ""),
 			targetstr);
+
+		free(targetstr);
 	} else if (ip->type == ARM_INSTR_TYPE_BKPT) {
 		int imm_hi, imm_lo;
 		ret = arm_instr_get_params(instr, ip, 2, &imm_hi, &imm_lo);
@@ -684,12 +695,14 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
 		ret = arm_instr_get_params(instr, ip, 2, &h, &offset);
 		if (ret < 0) abort();
 
-		unsigned int target = arm_instr_branch_target(offset, address);
+		unsigned int target = arm_instr_branch_target(offset, addr);
 
 		char *targetstr = addr_string(target);
 		if (targetstr == NULL) abort();
 
 		fprintf(f, "blx\t%s", targetstr);
+
+		free(targetstr);
 	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_XCHG) {
 		int cond, rm;
 		ret = arm_instr_get_params(instr, ip, 2, &cond, &rm);
@@ -859,6 +872,15 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
 		}
 
 		if (p) fprintf(f, "]%s", (w ? "!" : ""));
+
+		if (rn == 15) {
+			int off = ((off_hi << 4) | off_lo) * (u ? 1 : -1);
+			char *targetstr = addr_string(addr + 8 + off);
+			if (targetstr == NULL) abort();
+
+			fprintf(f, "\t; %s", targetstr);
+			free(targetstr);
+		}
 	} else if (ip->type == ARM_INSTR_TYPE_LS_TWO_REG_OFF) {
 		int cond, p, u, w, rn, rd, store, rm;
 		ret = arm_instr_get_params(instr, ip, 8, &cond, &p, &u, &w,
@@ -892,6 +914,15 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
 		}
 
 		if (p) fprintf(f, "]%s", (w ? "!" : ""));
+
+		if (rn == 15) {
+			int off = ((off_hi << 4) | off_lo) * (u ? 1 : -1);
+			char *targetstr = addr_string(addr + 8 + off);
+			if (targetstr == NULL) abort();
+
+			fprintf(f, "\t; %s", targetstr);
+			free(targetstr);
+		}
 	} else if (ip->type == ARM_INSTR_TYPE_L_SIGNED_REG_OFF) {
 		int cond, p, u, w, rn, rd, h, rm;
 		ret = arm_instr_get_params(instr, ip, 8, &cond, &p, &u, &w,
@@ -926,6 +957,15 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
 		}
 
 		if (p) fprintf(f, "]%s", (w ? "!" : ""));
+
+		if (rn == 15) {
+			int off = ((off_hi << 4) | off_lo) * (u ? 1 : -1);
+			char *targetstr = addr_string(addr + 8 + off);
+			if (targetstr == NULL) abort();
+
+			fprintf(f, "\t; %s", targetstr);
+			free(targetstr);
+		}
 	} else if (ip->type == ARM_INSTR_TYPE_DSP_ADD_SUB) {
 		int cond, op, rn, rd, rm;
 		ret = arm_instr_get_params(instr, ip, 5, &cond, &op, &rn, &rd,

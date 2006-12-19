@@ -431,7 +431,7 @@ void
 inter_fprint(FILE *f, inter_context_t *ctx)
 {
 	list_elm_t *elm;
-	list_foreach(ctx->instr_list, elm) {
+	list_foreach(&ctx->instr_list, elm) {
 		inter_instr_t *instr = (inter_instr_t *)elm;
 		fprintf(f, "%08x\t", instr->address);
 

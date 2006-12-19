@@ -46,7 +46,7 @@ int hashtable_rehash(hashtable_t *ht, size_t size);
 hashtable_elm_t *hashtable_lookup(hashtable_t *ht,
 				  const void *key, size_t len);
 int hashtable_insert(hashtable_t *ht, hashtable_elm_t *helm,
-		     const void *key, size_t len);
+		     const void *key, size_t len, hashtable_elm_t **old_elm);
 int hashtable_remove(hashtable_t *ht, hashtable_elm_t *helm);
 
 

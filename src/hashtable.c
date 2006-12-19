@@ -31,7 +31,12 @@
 #include "hashtable.h"
 #include "slist.h"
 
-#define REHASH_THRESHOLD  0.75
+#define REHASH_MAX_THRES  0.75
+#define REHASH_MIN_THRES  0.75
+#define TABLE_MIN_SIZE   23
+
+#define TABLE_SIZE_INC(size)  (((size) << 1) + 55)
+#define TABLE_SIZE_DEC(size)  (((size) - 55) >> 1)
 
 
 static uint32_t
@@ -61,10 +66,24 @@ lookup_bucket(slist_t *elms, size_t size, const void *key, size_t len)
 	return &elms[hash % size];
 }
 
-static void
-insert_elm(slist_t *elms, size_t size, hashtable_elm_t *helm)
+static hashtable_elm_t *
+bucket_remove_elm(slist_t *bucket, const void *key, size_t len)
 {
-	slist_t *bucket = lookup_bucket(elms, size, helm->key, helm->len);
+	slist_elm_t *elm, *preelm;
+	slist_foreach(bucket, elm, preelm) {
+		hashtable_elm_t *helm = (hashtable_elm_t *)elm;
+		if (len == helm->len && !memcmp(key, helm->key, len)) {
+			slist_elm_remove(elm, preelm);
+			return helm;
+		}
+	}
+
+	return NULL;
+}
+
+static void
+bucket_insert_elm(slist_t *bucket, hashtable_elm_t *helm)
+{
 	slist_prepend(bucket, (slist_elm_t *)helm);	
 }
 
@@ -82,7 +101,10 @@ hashtable_rehash(hashtable_t *ht, size_t size)
 		while (!slist_is_empty(bucket)) {
 			hashtable_elm_t *helm =
 				(hashtable_elm_t *)slist_remove_head(bucket);
-			insert_elm(elms, size, helm);
+			slist_t *bucket =
+				lookup_bucket(elms, size,
+					      helm->key, helm->len);
+			bucket_insert_elm(bucket, helm);
 		}
 	}
 
@@ -97,7 +119,7 @@ hashtable_rehash(hashtable_t *ht, size_t size)
 int
 hashtable_init(hashtable_t *ht, size_t size)
 {
-	ht->size = (size > 0) ? size : 23;
+	ht->size = (size > TABLE_MIN_SIZE) ? size : TABLE_MIN_SIZE;
 	ht->load = 0;
 
 	ht->elms = (slist_t *)calloc(ht->size, sizeof(slist_t));
@@ -119,31 +141,28 @@ hashtable_elm_t *
 hashtable_lookup(hashtable_t *ht, const void *key, size_t len)
 {
 	slist_t *bucket = lookup_bucket(ht->elms, ht->size, key, len);
+	hashtable_elm_t *helm = bucket_remove_elm(bucket, key, len);
+	if (helm == NULL) return NULL;
 
-	slist_elm_t *elm, *preelm;
-	slist_foreach(bucket, elm, preelm) {
-		hashtable_elm_t *helm = (hashtable_elm_t *)elm;
-		if (len == helm->len && !memcmp(key, helm->key, len)) {
-			slist_elm_remove(elm, preelm);
-			slist_prepend(bucket, elm);
-			return helm;
-		}
-	}
-
-	return NULL;
+	bucket_insert_elm(bucket, helm);
+	return helm;
 }
 
 int
 hashtable_insert(hashtable_t *ht, hashtable_elm_t *helm,
-		 const void *key, size_t len)
+		 const void *key, size_t len, hashtable_elm_t **old_helm)
 {
+	slist_t *bucket = lookup_bucket(ht->elms, ht->size, key, len);
+	hashtable_elm_t *old = bucket_remove_elm(bucket, key, len);
+	if (old_helm != NULL) *old_helm = old;
+
 	helm->key = key;
 	helm->len = len;
-	insert_elm(ht->elms, ht->size, helm);
+	bucket_insert_elm(bucket, helm);
 
 	ht->load += 1;
-	if (((float)ht->load / (float)ht->size) >= REHASH_THRESHOLD) {
-		return hashtable_rehash(ht, 2 * ht->size + 55);
+	if (((float)ht->load / (float)ht->size) >= REHASH_MAX_THRES) {
+		return hashtable_rehash(ht, TABLE_SIZE_INC(ht->size));
 	}
 
 	return 0;
@@ -154,16 +173,13 @@ hashtable_remove(hashtable_t *ht, hashtable_elm_t *helm)
 {
 	slist_t *bucket = lookup_bucket(ht->elms, ht->size,
 					helm->key, helm->len);
+	helm = bucket_remove_elm(bucket, helm->key, helm->len);
+	if (helm == NULL) return 0;
 
-	slist_elm_t *elm, *preelm;
-	slist_foreach(bucket, elm, preelm) {
-		hashtable_elm_t *loop_helm = (hashtable_elm_t *)elm;
-		if (helm->len == loop_helm->len &&
-		    !memcmp(helm->key, loop_helm->key, helm->len)) {
-			slist_elm_remove(elm, preelm);
-			ht->load -= 1;
-			return 0;
-		}
+	ht->load -= 1;
+	if (((float)ht->load / (float)ht->size) < REHASH_MIN_THRES &&
+	    TABLE_SIZE_DEC(ht->size) > TABLE_MIN_SIZE) {
+		return hashtable_rehash(ht, TABLE_SIZE_DEC(ht->size));
 	}
 
 	return 0;

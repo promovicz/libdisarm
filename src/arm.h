@@ -9,7 +9,9 @@
 #include <stdarg.h>
 
 
+typedef unsigned int uint_t;
 typedef uint32_t arm_instr_t;
+typedef uint_t arm_addr_t;
 
 typedef enum {
 	/* Data processing immediate shift */
@@ -163,15 +165,14 @@ static const char *data_opcode_map[] = {
 
 const arm_instr_pattern_t *arm_instr_get_instr_pattern(arm_instr_t instr);
 const arm_param_pattern_t *arm_instr_get_param_pattern(
-	const arm_instr_pattern_t *ip, unsigned int param);
-unsigned int arm_instr_get_param(arm_instr_t instr,
-				 const arm_instr_pattern_t *ip,
-				 unsigned int param);
+	const arm_instr_pattern_t *ip, uint_t param);
+uint_t arm_instr_get_param(arm_instr_t instr,
+				 const arm_instr_pattern_t *ip, uint_t param);
 int arm_instr_get_params(arm_instr_t instr, const arm_instr_pattern_t *ip,
-			 unsigned int params, ...);
-unsigned int arm_instr_branch_target(int offset, unsigned int address);
-void arm_instr_fprint(FILE *f, arm_instr_t instr, unsigned int address,
-		      char *(*addr_string)(unsigned int addr));
+			 uint_t params, ...);
+arm_addr_t arm_instr_branch_target(int offset, arm_addr_t address);
+void arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t address,
+		      char *(*addr_string)(arm_addr_t addr));
 
 
 #endif /* ! _ARM_H */
