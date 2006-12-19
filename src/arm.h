@@ -8,10 +8,8 @@
 #include <stdint.h>
 #include <stdarg.h>
 
+#include "types.h"
 
-typedef unsigned int uint_t;
-typedef uint32_t arm_instr_t;
-typedef uint_t arm_addr_t;
 
 typedef enum {
 	/* Data processing immediate shift */
