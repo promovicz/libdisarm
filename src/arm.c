@@ -392,6 +392,29 @@ static const arm_instr_pattern_t instr_pattern[] = {
 };
 
 
+static char *
+default_addr_string(arm_addr_t addr, void *data)
+{
+	char *addrstr = NULL;
+	int r;
+
+	static const char *format = "0x%x";
+
+	r = snprintf(NULL, 0, format, addr);
+	if (r > 0) {
+		addrstr = (char *)malloc((r+1)*sizeof(char));
+		if (addrstr == NULL) abort();
+		r = snprintf(addrstr, r+1, format, addr);
+	}
+
+	if (r <= 0) {
+		if (addrstr != NULL) free(addrstr);
+		return NULL;
+	}
+
+	return addrstr;
+}
+
 const arm_instr_pattern_t *
 arm_instr_get_instr_pattern(arm_instr_t instr)
 {
@@ -458,12 +481,48 @@ arm_instr_branch_target(int offset, arm_addr_t addr)
 	return (offset << 2) + addr + 0x8;
 }
 
+int
+arm_is_reg_changed(arm_instr_t instr, uint_t reg)
+{
+	const arm_instr_pattern_t *ip =
+		arm_instr_get_instr_pattern(instr);
+	if (ip == NULL) return -1;
+
+	if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK && reg == 15) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		return (cond != ARM_COND_NV);
+	} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
+		   ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
+		   ip->type == ARM_INSTR_TYPE_DATA_IMM) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int opcode = arm_instr_get_param(instr, ip, 1);
+		int rd = arm_instr_get_param(instr, ip, 4);
+
+		if ((opcode < ARM_DATA_OPCODE_TST ||
+		     opcode > ARM_DATA_OPCODE_CMN) && rd == reg) {
+			return (cond != ARM_COND_NV);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int load = arm_instr_get_param(instr, ip, 5);
+		int reglist = arm_instr_get_param(instr, ip, 7);
+
+		if (load && (reglist & (1 << reg))) {
+			return (cond != ARM_COND_NV);
+		}
+	}
+
+	return 0;
+}
 
 void
 arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
-		 char *(*addr_string)(arm_addr_t addr))
+		 char *(*addr_string)(arm_addr_t addr, void *data),
+		 void *user_data)
 {
 	int ret;
+
+	if (addr_string == NULL) addr_string = default_addr_string;
 
 	const arm_instr_pattern_t *ip = arm_instr_get_instr_pattern(instr);
 
@@ -631,7 +690,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		if (rn == 15) {
 			int off = imm * (u ? 1 : -1);
-			char *targetstr = addr_string(addr + 8 + off);
+			char *targetstr = addr_string(addr + 8 + off,
+						      user_data);
 			if (targetstr == NULL) abort();
 
 			fprintf(f, "\t; %s", targetstr);
@@ -674,7 +734,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		unsigned int target = arm_instr_branch_target(offset, addr);
 
-		char *targetstr = addr_string(target);
+		char *targetstr = addr_string(target, user_data);
 		if (targetstr == NULL) abort();
 
 		fprintf(f, "b%s%s\t%s",
@@ -697,7 +757,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		unsigned int target = arm_instr_branch_target(offset, addr);
 
-		char *targetstr = addr_string(target);
+		char *targetstr = addr_string(target, user_data);
 		if (targetstr == NULL) abort();
 
 		fprintf(f, "blx\t%s", targetstr);
@@ -875,7 +935,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		if (rn == 15) {
 			int off = ((off_hi << 4) | off_lo) * (u ? 1 : -1);
-			char *targetstr = addr_string(addr + 8 + off);
+			char *targetstr = addr_string(addr + 8 + off,
+						      user_data);
 			if (targetstr == NULL) abort();
 
 			fprintf(f, "\t; %s", targetstr);
@@ -917,7 +978,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		if (rn == 15) {
 			int off = ((off_hi << 4) | off_lo) * (u ? 1 : -1);
-			char *targetstr = addr_string(addr + 8 + off);
+			char *targetstr = addr_string(addr + 8 + off,
+						      user_data);
 			if (targetstr == NULL) abort();
 
 			fprintf(f, "\t; %s", targetstr);
@@ -960,7 +1022,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		if (rn == 15) {
 			int off = ((off_hi << 4) | off_lo) * (u ? 1 : -1);
-			char *targetstr = addr_string(addr + 8 + off);
+			char *targetstr = addr_string(addr + 8 + off,
+						      user_data);
 			if (targetstr == NULL) abort();
 
 			fprintf(f, "\t; %s", targetstr);

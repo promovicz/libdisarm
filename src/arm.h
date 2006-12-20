@@ -169,8 +169,11 @@ uint_t arm_instr_get_param(arm_instr_t instr,
 int arm_instr_get_params(arm_instr_t instr, const arm_instr_pattern_t *ip,
 			 uint_t params, ...);
 arm_addr_t arm_instr_branch_target(int offset, arm_addr_t address);
+int arm_is_reg_changed(arm_instr_t instr, uint_t reg);
+
 void arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t address,
-		      char *(*addr_string)(arm_addr_t addr));
+		      char *(*addr_string)(arm_addr_t addr, void *data),
+		      void *user_data);
 
 
 #endif /* ! _ARM_H */
