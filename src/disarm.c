@@ -178,13 +178,27 @@ main(int argc, char *argv[])
 	}
 
 	/* code/data separation */
+	FILE *jump_file = NULL;
+	if (argc >= 5) {
+		jump_file = fopen(argv[4], "r");
+		if (jump_file == NULL) {
+			perror("fopen");
+			exit(EXIT_FAILURE);
+		}
+	}
+
 	uint8_t *image_codemap;
-	r = codesep_analysis(&ep_list, image, &image_codemap, NULL);
+#if 0
+	r = codesep_analysis(&ep_list, image, &image_codemap, jump_file);
 	if (r < 0) {
 		perror("code_data_separate");
 		exit(EXIT_FAILURE);
 	}
+#endif
 
+	if (jump_file) fclose(jump_file);
+
+#if 0
 	FILE *codemap_out = fopen("code_bitmap", "wb");
 	if (codemap_out == NULL) return -1;
 	size_t write = fwrite(image_codemap, sizeof(uint8_t),
@@ -193,6 +207,7 @@ main(int argc, char *argv[])
 		fprintf(stderr, "Unable to write codemap.\n");
 	}
 	fclose(codemap_out);
+#endif
 
 	/* basic block analysis */
 	hashtable_t bb_ht;
@@ -209,7 +224,8 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	r = basicblock_analysis(&bb_ht, &sym_ht, &reflist_ht, image);
+	r = basicblock_analysis(&bb_ht, &sym_ht, &reflist_ht, image,
+				image_codemap);
 	if (r < 0) {
 		fprintf(stderr, "Unable to finish basic block analysis.\n");
 		exit(EXIT_FAILURE);

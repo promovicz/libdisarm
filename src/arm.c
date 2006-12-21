@@ -482,34 +482,162 @@ arm_instr_branch_target(int offset, arm_addr_t addr)
 }
 
 int
-arm_is_reg_changed(arm_instr_t instr, uint_t reg)
+arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg)
 {
+	int r;
+	uint_t reglist;
+	r = arm_instr_changed_regs(instr, &reglist);
+	if (r < 0) return -1;
+
+	return (reglist & (1 << reg));
+}
+
+int
+arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist)
+{
+	int ret;
+
 	const arm_instr_pattern_t *ip =
 		arm_instr_get_instr_pattern(instr);
 	if (ip == NULL) return -1;
 
-	if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK && reg == 15) {
-		int cond = arm_instr_get_param(instr, ip, 0);
-		return (cond != ARM_COND_NV);
-	} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
-		   ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
-		   ip->type == ARM_INSTR_TYPE_DATA_IMM) {
+	*reglist = 0xffff;
+
+	if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
+	    ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
+	    ip->type == ARM_INSTR_TYPE_DATA_IMM) {
 		int cond = arm_instr_get_param(instr, ip, 0);
 		int opcode = arm_instr_get_param(instr, ip, 1);
 		int rd = arm_instr_get_param(instr, ip, 4);
 
 		if ((opcode < ARM_DATA_OPCODE_TST ||
-		     opcode > ARM_DATA_OPCODE_CMN) && rd == reg) {
-			return (cond != ARM_COND_NV);
+		     opcode > ARM_DATA_OPCODE_CMN) &&
+		    cond != ARM_COND_NV) {
+			*reglist = (1 << rd);
+		} else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_SWI) {
+		*reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_CLZ) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int rd = arm_instr_get_param(instr, ip, 1);
+		if (cond != ARM_COND_NV) *reglist = (1 << rd);
+		else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_MOVE_IMM_STATUS ||
+		   ip->type == ARM_INSTR_TYPE_MOVE_REG_STATUS) {
+		*reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_MOVE_STATUS_REG) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int rd = arm_instr_get_param(instr, ip, 2);
+		if (cond != ARM_COND_NV) *reglist = (1 << rd);
+		else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF ||
+		   ip->type == ARM_INSTR_TYPE_LS_REG_OFF) {
+		int cond, p, w, load, rn, rd;
+		ret = arm_instr_get_params(instr, ip, 8, &cond, &p, NULL,
+					   NULL, &w, &load, &rn, &rd);
+		if (ret < 0) abort();
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			if (load) *reglist |= (1 << rd);
+			if (!p || (p && w)) *reglist |= (1 << rn);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int link = arm_instr_get_param(instr, ip, 1);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist |= (1 << 15);
+			if (link) *reglist |= (1 << 14);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_BKPT) {
+		*reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK_THUMB) {
+		*reglist = (1 << 15) | (1 << 14);
+	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_XCHG) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		if (cond != ARM_COND_NV) *reglist = (1 << 15);
+		else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK_XCHG) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		if (cond != ARM_COND_NV) *reglist = (1 << 15) | (1 << 14);
+		else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_CP_DATA) {
+		*reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_CP_LS) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int w = arm_instr_get_param(instr, ip, 4);
+		int rn = arm_instr_get_param(instr, ip, 6);
+
+		if (cond != ARM_COND_NV && w) {
+			*reglist = (1 << rn);
+		} else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_CP_REG) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int load = arm_instr_get_param(instr, ip, 2);
+		int rd = arm_instr_get_param(instr, ip, 4);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV && load) {
+			if (rd != 15) *reglist = (1 << rd);
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
 		int cond = arm_instr_get_param(instr, ip, 0);
+		int w = arm_instr_get_param(instr, ip, 4);
 		int load = arm_instr_get_param(instr, ip, 5);
-		int reglist = arm_instr_get_param(instr, ip, 7);
+		int rn = arm_instr_get_param(instr, ip, 6);
+		int rlist = arm_instr_get_param(instr, ip, 7);
 
-		if (load && (reglist & (1 << reg))) {
-			return (cond != ARM_COND_NV);
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			if (load) *reglist |= rlist;
+			if (w) *reglist |= (1 << rn);
 		}
+	} else if (ip->type == ARM_INSTR_TYPE_MUL) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int rd = arm_instr_get_param(instr, ip, 3);
+
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rd);
+		} else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_MUL_LONG) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int rdhi = arm_instr_get_param(instr, ip, 4);
+		int rdlo = arm_instr_get_param(instr, ip, 5);
+
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rdhi) | (1 << rdlo);
+		} else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_SWAP) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int rd = arm_instr_get_param(instr, ip, 3);
+
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rd);
+		} else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_LS_HWORD_REG_OFF ||
+		   ip->type == ARM_INSTR_TYPE_LS_HWORD_IMM_OFF) {
+		int cond, p, w, load, rn, rd;
+		ret = arm_instr_get_params(instr, ip, 7, &cond, &p, NULL,
+					   &w, &load, &rn, &rd);
+		if (ret < 0) abort();
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			if (load) *reglist |= (1 << rd);
+			if (!p || (p && w)) *reglist |= (1 << rn);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_LS_TWO_REG_OFF ||
+		   ip->type == ARM_INSTR_TYPE_LS_TWO_IMM_OFF) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_L_SIGNED_REG_OFF ||
+		   ip->type == ARM_INSTR_TYPE_L_SIGNED_IMM_OFF) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_DSP_ADD_SUB) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_DSP_MUL) {
+		/* TODO */
 	}
 
 	return 0;
@@ -776,13 +904,6 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "blx%s\tr%d",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""), rm);
-	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_XCHG) {
-		int cond, rm;
-		ret = arm_instr_get_params(instr, ip, 2, &cond, &rm);
-		if (ret < 0) abort();
-
-		fprintf(f, "bx%s\tr%d",
 			(cond != ARM_COND_AL ? cond_map[cond] : ""), rm);
 	} else if (ip->type == ARM_INSTR_TYPE_CP_DATA) {
 		int cond, opcode_1, crn, crd, cp_num, opcode_2, crm;

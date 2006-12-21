@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include "basicblock.h"
 #include "arm.h"
@@ -86,7 +87,8 @@ basicblock_add(hashtable_t *bb_ht, uint_t addr)
 
 int
 basicblock_analysis(hashtable_t *bb_ht, hashtable_t *sym_ht,
-		    hashtable_t *reflist_ht, image_t *image)
+		    hashtable_t *reflist_ht, image_t *image,
+		    uint8_t *codemap)
 {
 	int r;
 
@@ -109,6 +111,13 @@ basicblock_analysis(hashtable_t *bb_ht, hashtable_t *sym_ht,
 		r = image_read_instr(image, i, &instr);
 		if (r == 0) break;
 		else if (r < 0) return -1;
+
+#if 0
+		if (!codemap[i >> 2]) {
+			i += sizeof(arm_instr_t);
+			continue;
+		}
+#endif
 
 		const arm_instr_pattern_t *ip =
 			arm_instr_get_instr_pattern(instr);

@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #include "hashtable.h"
 #include "image.h"
@@ -32,7 +33,8 @@ typedef struct {
 
 
 int basicblock_analysis(hashtable_t *bb_ht, hashtable_t *sym_ht,
-			hashtable_t *reflist_ht, image_t *image);
+			hashtable_t *reflist_ht, image_t *image,
+			uint8_t *codemap);
 
 
 #endif /* ! _BASICBLOCK_H */

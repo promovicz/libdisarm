@@ -12,7 +12,7 @@
 #include "types.h"
 
 
-void
+int
 symbol_add(hashtable_t *sym_ht, arm_addr_t addr, const char *name,
 	   int overwrite)
 {
@@ -21,24 +21,37 @@ symbol_add(hashtable_t *sym_ht, arm_addr_t addr, const char *name,
 	if (!overwrite) {
 		sym_elm_t *sym = (sym_elm_t *)
 			hashtable_lookup(sym_ht, &addr, sizeof(arm_addr_t));
-		if (sym != NULL) return;
+		if (sym != NULL) return 0;
 	}
 
 	sym_elm_t *sym = malloc(sizeof(sym_elm_t));
-	if (sym == NULL) abort();
+	if (sym == NULL) {
+		errno = ENOMEM;
+		return -1;
+	}
 
 	sym->addr = addr;
 	sym->name = strdup(name);
-	if (sym->name == NULL) abort();
+	if (sym->name == NULL) {
+		int errsv = errno;
+		free(sym);
+		errno = errsv;
+		return -1;
+	}
 
 	hashtable_elm_t *old;
 	r = hashtable_insert(sym_ht, (hashtable_elm_t *)sym,
 			     &sym->addr, sizeof(arm_addr_t), &old);
 	if (r < 0) {
-		perror("hashtable_insert");
-		exit(EXIT_FAILURE);
+		int errsv = errno;
+		free(sym->name);
+		free(sym);
+		errno = errsv;
+		return -1;
 	}
 	if (old != NULL) free(old);
+
+	return 0;
 }
 
 int
@@ -67,16 +80,15 @@ symbol_add_from_file(hashtable_t *sym_ht, FILE *f)
 				return -1;
 			}
 
-			while (*endptr != '\0' && isblank(*endptr)) {
-				endptr += 1;
-			}
+			while (isblank(*endptr)) endptr += 1;
 
 			if (*endptr == '\0' || *endptr == '\n') continue;
 
 			char *nlptr = strchr(endptr, '\n');
 			if (nlptr != NULL) *nlptr = '\0';
 
-			symbol_add(sym_ht, addr, endptr, 1);
+			r = symbol_add(sym_ht, addr, endptr, 1);
+			if (r < 0) return -1;
 		}
 	}
 

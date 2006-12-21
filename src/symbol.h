@@ -17,8 +17,8 @@ typedef struct {
 } sym_elm_t;
 
 
-void symbol_add(hashtable_t *sym_ht, arm_addr_t addr, const char *name,
-		int overwrite);
+int symbol_add(hashtable_t *sym_ht, arm_addr_t addr, const char *name,
+	       int overwrite);
 int symbol_add_from_file(hashtable_t *sym_ht, FILE *f);
 
 
