@@ -18,7 +18,7 @@
 
 
 image_t *
-image_new(const char *filename)
+image_new(const char *filename, int big_endian)
 {
 	int r;
 
@@ -57,6 +57,8 @@ image_new(const char *filename)
 		return NULL;
 	}
 
+	image->big_endian = big_endian;
+
 	r = hashtable_init(&image->annot_ht, 0);
 	if (r < 0) return NULL;
 
@@ -82,7 +84,8 @@ image_read_instr(image_t *image, uint_t addr, arm_instr_t *instr)
 
 	arm_instr_t *insdata = (arm_instr_t *)image->data;
 
-	*instr = htobe32(insdata[addr >> 2]);
+	if (image->big_endian) *instr = be32toh(insdata[addr >> 2]);
+	else *instr = le32toh(insdata[addr >> 2]);
 
 	return 1;
 }
@@ -148,6 +151,7 @@ image_add_annot_from_file(image_t *image, FILE *f)
 
 	hashtable_t *annot_ht = &image->annot_ht;
 
+	uint_t line = 1;
 	while ((read = getline(&text, &textlen, f)) != -1) {
 		if (read == 0 || !strcmp(text, "\n")) {
 			reading_addr = 1;
@@ -161,7 +165,8 @@ image_add_annot_from_file(image_t *image, FILE *f)
 			    || (errno != 0 && addr == 0)
 			    || (endptr == text)) {
 				free(text);
-				fprintf(stderr, "Unable to parse address.\n");
+				fprintf(stderr, "Unable to parse address at"
+					" line %u.\n", line);
 				return -1;
 			}
 
@@ -180,6 +185,7 @@ image_add_annot_from_file(image_t *image, FILE *f)
 			}
 			text = NULL;
 		}
+		line += 1;
 	}
 
 	if (text) free(text);

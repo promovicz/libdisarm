@@ -738,6 +738,24 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 			(imm >> (rot << 1)) | (imm << (32 - (rot << 1)));
 
 		fprintf(f, ", #%s%x", (rot_imm < 10 ? "" : "0x"), rot_imm);
+
+		if (rn == 15) {
+			if (opcode == ARM_DATA_OPCODE_ADD) {
+				char *immstr = addr_string(addr + 8 + rot_imm,
+							   user_data);
+				if (immstr == NULL) abort();
+
+				fprintf(f, "\t; %s", immstr);
+				free(immstr);
+			} else if (opcode == ARM_DATA_OPCODE_SUB) {
+				char *immstr = addr_string(addr + 8 - rot_imm,
+							   user_data);
+				if (immstr == NULL) abort();
+
+				fprintf(f, "\t; %s", immstr);
+				free(immstr);
+			}
+		}
 	} else if (ip->type == ARM_INSTR_TYPE_UNDEF_1 ||
 		   ip->type == ARM_INSTR_TYPE_UNDEF_2 ||
 		   ip->type == ARM_INSTR_TYPE_UNDEF_3 ||

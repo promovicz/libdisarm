@@ -110,8 +110,9 @@ main(int argc, char *argv[])
 	if (argc < 2) return EXIT_FAILURE;
 
 	/* load file */
-	image_t *image = image_new(argv[1]);
+	image_t *image = image_new(&argv[1][1], (argv[1][0] == 'B' ? 1 : 0));
 	if (image == NULL) {
+		fprintf(stderr, "Unable to open file: `%s'.\n", &argv[1][1]);
 		perror("image_new");
 		exit(EXIT_FAILURE);
 	}
@@ -239,7 +240,7 @@ main(int argc, char *argv[])
 		if (r == 0) break;
 		else if (r < 0) return -1;
 
-		int ref_begin = 0;
+		int refs_printed = 0;
 
 		/* basic block */
 		bb_elm_t *bb = (bb_elm_t *)
@@ -263,10 +264,13 @@ main(int argc, char *argv[])
 			while (!list_is_empty(&reflist->refs)) {
 				ref_elm_t *ref = (ref_elm_t *)
 					list_remove_head(&reflist->refs);
-				if (!ref_begin) {
-					ref_begin = 1;
+				if (refs_printed == 0) {
 					printf("; reference from");
-				} else printf(",");
+				} else if (refs_printed % 4 == 0) {
+					printf(",\n;\t\t");
+				} else {
+					printf(",");
+				}
 
 				char *sourcestr = addr_string(ref->source,
 							      &sym_ht);
@@ -274,7 +278,9 @@ main(int argc, char *argv[])
 
 				printf(" %s(%s)%s", sourcestr,
 				       (ref->cond ? "C" : "U"),
-				       (ref->link ? "L" : ""));
+				       (ref->link ? "L" :
+					((i > ref->source) ? "F" : "B")));
+				refs_printed += 1;
 
 				free(sourcestr);
 
@@ -290,7 +296,7 @@ main(int argc, char *argv[])
 
 			free(reflist);
 		}
-		if (ref_begin) printf("\n");
+		if (refs_printed > 0) printf("\n");
 
 		list_t post_annot_list;
 		list_init(&post_annot_list);
@@ -311,11 +317,14 @@ main(int argc, char *argv[])
 			if (annot->pre) {
 				char *text = annot->text;
 				size_t textlen = annot->textlen;
-				while (1) {
+				while (*text != '\0') {
 					char *nl = memchr(text, '\n',
 							  textlen);
-					if (nl == NULL) break;
-					printf("; %.*s\n", nl - text, text);
+					if (nl == NULL || nl-text == 0) {
+						break;
+					}
+
+					printf("; %.*s\n", nl-text, text);
 					textlen -= nl - text - 1;
 					text = nl + 1;
 				}
@@ -343,10 +352,10 @@ main(int argc, char *argv[])
 
 			char *text = annot->text;
 			size_t textlen = annot->textlen;
-			while (1) {
+			while (*text != '\0') {
 				char *nl = memchr(text, '\n', textlen);
-				if (nl == NULL) break;
-				printf("; %.*s\n", nl - text, text);
+				if (nl == NULL || nl-text == 0) break;
+				printf("; %.*s\n", nl-text, text);
 				textlen -= nl - text - 1;
 				text = nl + 1;
 			}

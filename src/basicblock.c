@@ -127,8 +127,6 @@ basicblock_analysis(hashtable_t *bb_ht, hashtable_t *sym_ht,
 		}
 
 		if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK) {
-			list_elm_t *elm;
-
 			int cond = arm_instr_get_param(instr, ip, 0);
 			int link = arm_instr_get_param(instr, ip, 1);
 			int offset = arm_instr_get_param(instr, ip, 2);
@@ -138,24 +136,60 @@ basicblock_analysis(hashtable_t *bb_ht, hashtable_t *sym_ht,
 			/* basic block for fall-through */
 			basicblock_add(bb_ht, i + sizeof(arm_instr_t));
 
+			if (link || cond != ARM_COND_AL) {
+				/* fall-through reference */
+				reference_add(reflist_ht, sym_ht, i,
+					      i + sizeof(arm_instr_t), 0, 0);
+			}
+
 			/* basic block for branch target */
 			basicblock_add(bb_ht, target);
 
-			/* reference */
+			/* target reference */
 			reference_add(reflist_ht, sym_ht, i, target,
 				      (cond != ARM_COND_AL), link);
 		} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_IMM) {
+			int cond = arm_instr_get_param(instr, ip, 0);
 			int rd = arm_instr_get_param(instr, ip, 4);
 			if (rd == 15) {
 				basicblock_add(bb_ht, i + sizeof(arm_instr_t));
+
+				if (cond != ARM_COND_AL) {
+					/* fall-through reference */
+					reference_add(reflist_ht, sym_ht, i,
+						      i + sizeof(arm_instr_t),
+						      1, 0);
+				}
+			}
+		} else if (ip->type == ARM_INSTR_TYPE_LS_REG_OFF ||
+			   ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
+			int cond = arm_instr_get_param(instr, ip, 0);
+			int rd = arm_instr_get_param(instr, ip, 7);
+			if (rd == 15) {
+				basicblock_add(bb_ht, i + sizeof(arm_instr_t));
+
+				if (cond != ARM_COND_AL) {
+					/* fall-through reference */
+					reference_add(reflist_ht, sym_ht, i,
+						      i + sizeof(arm_instr_t),
+						      1, 0);
+				}
 			}
 		} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
+			int cond = arm_instr_get_param(instr, ip, 0);
 			int load = arm_instr_get_param(instr, ip, 5);
 			int reglist = arm_instr_get_param(instr, ip, 7);
 			if (load && (reglist & (1 << 15))) {
 				basicblock_add(bb_ht, i + sizeof(arm_instr_t));
+
+				if (cond != ARM_COND_AL) {
+					/* fall-through reference */
+					reference_add(reflist_ht, sym_ht, i,
+						      i + sizeof(arm_instr_t),
+						      1, 0);
+				}
 			}
 		}
 

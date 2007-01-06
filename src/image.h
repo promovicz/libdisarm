@@ -15,6 +15,7 @@ typedef struct {
 	FILE *file;
 	uint_t size;
 	void *data;
+	int big_endian;
 	hashtable_t annot_ht;
 } image_t;
 
@@ -27,7 +28,7 @@ typedef struct {
 } annot_elm_t;
 
 
-image_t *image_new(const char *filename);
+image_t *image_new(const char *filename, int big_endian);
 void image_free(image_t *image);
 int image_read_instr(image_t *image, uint_t addr, arm_instr_t *instr);
 int image_add_annot(image_t *image, uint_t addr,
