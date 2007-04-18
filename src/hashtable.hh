@@ -1,7 +1,7 @@
 /*
- * hashtable.hh - Hashtable header
+ * hashtable.hh - Hashtable header (C++)
  *
- * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
+ * Copyright (C) 2007  Jon Lund Steffensen <jonls@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,9 +20,6 @@
 
 #ifndef _HASHTABLE_HH
 #define _HASHTABLE_HH
-
-#include <stdio.h>
-#include <stdlib.h>
 
 #include "slist.hh"
 

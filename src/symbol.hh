@@ -3,9 +3,6 @@
 #ifndef _SYMBOL_HH
 #define _SYMBOL_HH
 
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "hashtable.hh"
 #include "types.hh"
 

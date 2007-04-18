@@ -4,10 +4,9 @@
 # include <config.h>
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdarg.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstdarg>
 
 #include "arm.hh"
 

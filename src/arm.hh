@@ -3,11 +3,6 @@
 #ifndef _ARM_HH
 #define _ARM_HH
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdarg.h>
-
 #include "types.hh"
 
 

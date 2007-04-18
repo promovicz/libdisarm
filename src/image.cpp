@@ -1,14 +1,15 @@
 /* image.cpp */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <climits>
+#include <cerrno>
+
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
-#include <limits.h>
-#include <unistd.h>
-#include <errno.h>
 
 #include "image.hh"
 #include "endian.hh"

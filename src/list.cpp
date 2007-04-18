@@ -1,7 +1,7 @@
 /*
- * list.cpp - List functions
+ * list.cpp - List functions (C++)
  *
- * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
+ * Copyright (C) 2007  Jon Lund Steffensen <jonls@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,8 +22,8 @@
 # include <config.h>
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "list.hh"
 

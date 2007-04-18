@@ -1,7 +1,7 @@
 /*
- * slist.hhh - Singly-linked list header
+ * slist.hh - Singly-linked list header (C++)
  *
- * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
+ * Copyright (C) 2007  Jon Lund Steffensen <jonlst@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
 
 
 #define SLIST_INIT  \
-  { .head = NULL }
+  { NULL }
 
 #define slist_foreach(list,elm,preelm)  \
   for ((preelm) = (slist_elm_t *)list, (elm) = (preelm)->next; \

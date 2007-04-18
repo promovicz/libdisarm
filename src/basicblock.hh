@@ -3,10 +3,6 @@
 #ifndef _BASICBLOCK_HH
 #define _BASICBLOCK_HH
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-
 #include "hashtable.hh"
 #include "image.hh"
 #include "list.hh"

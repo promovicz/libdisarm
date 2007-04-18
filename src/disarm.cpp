@@ -1,13 +1,11 @@
 /* disarm.cpp */
 
-//#define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <limits.h>
-#include <ctype.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <climits>
+#include <cctype>
+#include <cerrno>
 
 #include "arm.hh"
 #include "basicblock.hh"

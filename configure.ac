@@ -16,7 +16,6 @@ AC_PROG_INSTALL
 # Checks for libraries.
 
 # Checks for header files.
-AC_HEADER_STDC
 AC_HEADER_ASSERT
 AC_CHECK_HEADERS([limits.h stdint.h stdlib.h string.h unistd.h])
 

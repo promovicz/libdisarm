@@ -1,7 +1,7 @@
 /*
- * list.hh - List header
+ * list.hh - List header (C++)
  *
- * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
+ * Copyright (C) 2007  Jon Lund Steffensen <jonls@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,9 +23,9 @@
 
 
 #define LIST_INIT(list)  \
-  { .head = (list_elm_t *)&((list).null), \
-    .null = NULL, \
-    .tail = (list_elm_t *)&((list).head) }
+  { (list_elm_t *)&((list).null), \
+    NULL, \
+    (list_elm_t *)&((list).head) }
 
 #define list_foreach(list,elm)  \
   for ((elm) = (list)->head; \

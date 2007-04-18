@@ -3,10 +3,7 @@
 #ifndef _INTER_HH
 #define _INTER_HH
 
-#include <stdio.h>
-#include <stdlib.h>
-
-#include "arm.hh"
+#include "types.hh"
 
 
 typedef struct _inter_ctx inter_ctx_t;

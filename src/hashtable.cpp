@@ -1,7 +1,7 @@
 /*
- * hashtable.cpp - Hashtable functions
+ * hashtable.cpp - Hashtable functions (C++)
  *
- * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
+ * Copyright (C) 2007  Jon Lund Steffensen <jonls@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,14 +22,15 @@
 # include <config.h>
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cerrno>
 
 #include "hashtable.hh"
 #include "slist.hh"
+#include "types.hh"
+
 
 #define REHASH_MAX_THRES  0.75
 #define REHASH_MIN_THRES  0.75

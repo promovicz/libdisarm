@@ -1,7 +1,7 @@
 /*
- * endian.h - Endianness conversion header
+ * endian.hh - Endianness conversion header (C++)
  *
- * Copyright (C) 2006  Jon Lund Steffensen <jonlst@gmail.com>
+ * Copyright (C) 2007  Jon Lund Steffensen <jonlst@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,10 +28,6 @@
 # ifdef HAVE_CONFIG_H
 #  include <config.h>
 # endif
-
-# include <stdio.h>
-# include <stdlib.h>
-# include <stdint.h>
 
 # ifdef HAVE_BYTESWAP_H
 #  include <byteswap.h>

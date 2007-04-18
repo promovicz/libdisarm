@@ -1,8 +1,7 @@
 /* basicblock.cpp */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "basicblock.hh"
 #include "arm.hh"

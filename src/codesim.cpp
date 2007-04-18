@@ -1,9 +1,9 @@
 /* codesim.cpp */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cerrno>
 
 #include "arm.hh"
 #include "codesim.hh"

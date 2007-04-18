@@ -3,9 +3,6 @@
 #ifndef _IMAGE_HH
 #define _IMAGE_HH
 
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "hashtable.hh"
 #include "image.hh"
 #include "types.hh"
@@ -36,4 +33,4 @@ int image_add_annot(image_t *image, uint_t addr,
 int image_add_annot_from_file(image_t *image, FILE *f);
 
 
-#endif /* _ */
+#endif /* _IMAGE_HH */
