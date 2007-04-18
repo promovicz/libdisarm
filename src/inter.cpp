@@ -1,11 +1,11 @@
-/* inter.c */
+/* inter.cpp */
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "arm.h"
-#include "inter.h"
-#include "list.h"
+#include "arm.hh"
+#include "inter.hh"
+#include "list.hh"
 
 
 typedef enum {
@@ -62,7 +62,7 @@ typedef struct {
 } inter_instr_t;
 
 
-struct _inter_context {
+struct _inter_ctx {
 	list_t instr_list;
 	unsigned int next_var;
 };
@@ -76,10 +76,11 @@ typedef enum {
 } inter_arm_flag_t;
 
 
-inter_context_t *
-inter_new_context()
+inter_ctx_t *
+inter_new_ctx()
 {
-	inter_context_t *ctx = malloc(sizeof(inter_context_t));
+	inter_ctx_t *ctx = static_cast<inter_ctx_t *>
+		(malloc(sizeof(inter_ctx_t)));
 	if (ctx == NULL) return NULL;
 
 	list_init(&ctx->instr_list);
@@ -89,7 +90,7 @@ inter_new_context()
 }
 
 void
-inter_clear_context(inter_context_t *ctx)
+inter_clear_ctx(inter_ctx_t *ctx)
 {
 	inter_instr_t *instr;
 	while (list_head(&ctx->instr_list) != NULL) {
@@ -99,7 +100,7 @@ inter_clear_context(inter_context_t *ctx)
 }
 
 static unsigned int
-inter_alloc_var(inter_context_t *ctx)
+inter_alloc_var(inter_ctx_t *ctx)
 {
 	unsigned int new_var = ctx->next_var;
 	ctx->next_var += 1;
@@ -108,11 +109,12 @@ inter_alloc_var(inter_context_t *ctx)
 }
 
 static void
-inter_append_data_instr(inter_context_t *ctx, inter_data_op_type_t op,
+inter_append_data_instr(inter_ctx_t *ctx, inter_data_op_type_t op,
 			unsigned int a, unsigned int b, unsigned int c,
 			unsigned int address)
 {
-	inter_instr_t *instr = malloc(sizeof(inter_instr_t));
+	inter_instr_t *instr = static_cast<inter_instr_t *>
+		(malloc(sizeof(inter_instr_t)));
 	if (instr == NULL) abort();
 
 	instr->address = address;
@@ -126,11 +128,12 @@ inter_append_data_instr(inter_context_t *ctx, inter_data_op_type_t op,
 }
 
 static void
-inter_append_ls_instr(inter_context_t *ctx, inter_ls_op_type_t op,
+inter_append_ls_instr(inter_ctx_t *ctx, inter_ls_op_type_t op,
 		      inter_ls_type_t type, unsigned int a, unsigned int b,
 		      unsigned int address)
 {
-	inter_instr_t *instr = malloc(sizeof(inter_instr_t));
+	inter_instr_t *instr = static_cast<inter_instr_t *>
+		(malloc(sizeof(inter_instr_t)));
 	if (instr == NULL) abort();
 
 	instr->address = address;
@@ -144,9 +147,10 @@ inter_append_ls_instr(inter_context_t *ctx, inter_ls_op_type_t op,
 }
 
 static void
-inter_append_undef_instr(inter_context_t *ctx, unsigned int address)
+inter_append_undef_instr(inter_ctx_t *ctx, unsigned int address)
 {
-	inter_instr_t *instr = malloc(sizeof(inter_instr_t));
+	inter_instr_t *instr = static_cast<inter_instr_t *>
+		(malloc(sizeof(inter_instr_t)));
 	if (instr == NULL) abort();
 
 	instr->address = address;
@@ -157,7 +161,7 @@ inter_append_undef_instr(inter_context_t *ctx, unsigned int address)
 
 
 static void
-inter_append_instr_neg(inter_context_t *ctx, unsigned int a, unsigned int b,
+inter_append_instr_neg(inter_ctx_t *ctx, unsigned int a, unsigned int b,
 		       unsigned int address)
 {
 	/* a = 0 - b */
@@ -168,7 +172,7 @@ inter_append_instr_neg(inter_context_t *ctx, unsigned int a, unsigned int b,
 }
 
 static void
-inter_append_instr_asr(inter_context_t *ctx, unsigned int a, unsigned int b,
+inter_append_instr_asr(inter_ctx_t *ctx, unsigned int a, unsigned int b,
 		       unsigned int c, unsigned int address)
 {
 	/* a = (b >> c) | (-(b >> 31) << (32 - c)) */
@@ -206,7 +210,7 @@ inter_append_instr_asr(inter_context_t *ctx, unsigned int a, unsigned int b,
 }
 
 static void
-inter_append_instr_ror(inter_context_t *ctx, unsigned int a, unsigned int b,
+inter_append_instr_ror(inter_ctx_t *ctx, unsigned int a, unsigned int b,
 		       unsigned int c, unsigned int address)
 {
 	/* a = (b >> c) | (b << (32 - c)) */
@@ -230,7 +234,7 @@ inter_append_instr_ror(inter_context_t *ctx, unsigned int a, unsigned int b,
 }
 
 static void
-inter_append_instr_rrx(inter_context_t *ctx, unsigned int a, unsigned int b,
+inter_append_instr_rrx(inter_ctx_t *ctx, unsigned int a, unsigned int b,
 		       unsigned int address)
 {
 	/* a = (carry << 31) | (b >> 1) */
@@ -259,7 +263,7 @@ inter_append_instr_rrx(inter_context_t *ctx, unsigned int a, unsigned int b,
 }
 
 static void
-inter_arm_append_data_imm_shift(inter_context_t *ctx, arm_instr_t instr,
+inter_arm_append_data_imm_shift(inter_ctx_t *ctx, arm_instr_t instr,
 				const arm_instr_pattern_t *ip,
 				unsigned int address)
 {
@@ -366,10 +370,10 @@ inter_arm_append_data_imm_shift(inter_context_t *ctx, arm_instr_t instr,
 	case ARM_DATA_OPCODE_RSC:
 		inter_append_data_instr(ctx, INTER_DATA_OP_SUB,
 					rd_var, rm_var, rn_var, address);
-		int carry = inter_alloc_var(ctx);
+		carry = inter_alloc_var(ctx);
 		inter_append_ls_instr(ctx, INTER_LS_OP_LOAD, INTER_LS_FLAG,
 				      carry, INTER_ARM_FLAG_CARRY, address);
-		int tmp = inter_alloc_var(ctx);
+		tmp = inter_alloc_var(ctx);
 		inter_append_ls_instr(ctx, INTER_LS_OP_LOAD, INTER_LS_IMM,
 				      tmp, 1, address);
 		inter_append_data_instr(ctx, INTER_DATA_OP_SUB,
@@ -409,7 +413,7 @@ inter_arm_append_data_imm_shift(inter_context_t *ctx, arm_instr_t instr,
 }
 
 void
-inter_arm_append(inter_context_t *ctx, arm_instr_t instr, unsigned int address)
+inter_arm_append(inter_ctx_t *ctx, arm_instr_t instr, unsigned int address)
 {
 	int ret;
 
@@ -428,7 +432,7 @@ inter_arm_append(inter_context_t *ctx, arm_instr_t instr, unsigned int address)
 }
 
 void
-inter_fprint(FILE *f, inter_context_t *ctx)
+inter_fprint(FILE *f, inter_ctx_t *ctx)
 {
 	list_elm_t *elm;
 	list_foreach(&ctx->instr_list, elm) {

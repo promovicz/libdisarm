@@ -1,14 +1,14 @@
-/* image.h */
+/* image.hh */
 
-#ifndef _IMAGE_H
-#define _IMAGE_H
+#ifndef _IMAGE_HH
+#define _IMAGE_HH
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "hashtable.h"
-#include "image.h"
-#include "types.h"
+#include "hashtable.hh"
+#include "image.hh"
+#include "types.hh"
 
 
 typedef struct {
@@ -36,4 +36,4 @@ int image_add_annot(image_t *image, uint_t addr,
 int image_add_annot_from_file(image_t *image, FILE *f);
 
 
-#endif /* _IMAGE_H */
+#endif /* _ */

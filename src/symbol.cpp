@@ -1,6 +1,5 @@
-/* symbol.c */
+/* symbol.cpp */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,8 +7,8 @@
 #include <ctype.h>
 #include <errno.h>
 
-#include "symbol.h"
-#include "types.h"
+#include "symbol.hh"
+#include "types.hh"
 
 
 int
@@ -24,7 +23,8 @@ symbol_add(hashtable_t *sym_ht, arm_addr_t addr, const char *name,
 		if (sym != NULL) return 0;
 	}
 
-	sym_elm_t *sym = malloc(sizeof(sym_elm_t));
+	sym_elm_t *sym = static_cast<sym_elm_t *>
+		(malloc(sizeof(sym_elm_t)));
 	if (sym == NULL) {
 		errno = ENOMEM;
 		return -1;

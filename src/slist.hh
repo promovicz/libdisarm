@@ -1,5 +1,5 @@
 /*
- * slist.h - Singly-linked list header
+ * slist.hhh - Singly-linked list header
  *
  * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
  *
@@ -18,8 +18,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _SLIST_H
-#define _SLIST_H
+#ifndef _SLIST_HH
+#define _SLIST_HH
 
 
 #define SLIST_INIT  \
@@ -59,4 +59,4 @@ slist_elm_t *slist_remove_head(slist_t *list);
 int slist_is_empty(slist_t *list);
 
 
-#endif /* ! _SLIST_H */
+#endif /* ! _SLIST_HH */

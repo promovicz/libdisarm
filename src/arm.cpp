@@ -1,4 +1,4 @@
-/* arm.c */
+/* arm.cpp */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>
@@ -9,34 +9,34 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-#include "arm.h"
+#include "arm.hh"
 
 
 static const arm_param_pattern_t branch_xchg_pattern[] = {
 	{ 0xf0000000, 28, ARM_PARAM_TYPE_COND, "cond" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t clz_pattern[] = {
 	{ 0xf0000000, 28, ARM_PARAM_TYPE_COND, "cond" },
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t bkpt_pattern[] = {
 	{ 0xf0000000, 28, ARM_PARAM_TYPE_COND, "cond" },
 	{ 0x000fff00,  8, ARM_PARAM_TYPE_UINT, "immediateHi" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_UINT, "immediateLo" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t move_status_reg_pattern[] = {
 	{ 0xf0000000, 28, ARM_PARAM_TYPE_COND, "cond" },
 	{ 0x00400000, 22, ARM_PARAM_TYPE_UINT, "R" },
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t move_reg_status_pattern[] = {
@@ -44,7 +44,7 @@ static const arm_param_pattern_t move_reg_status_pattern[] = {
 	{ 0x00400000, 22, ARM_PARAM_TYPE_UINT, "R" },
 	{ 0x000f0000, 16, ARM_PARAM_TYPE_UINT, "mask" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t swap_pattern[] = {
@@ -53,7 +53,7 @@ static const arm_param_pattern_t swap_pattern[] = {
 	{ 0x000f0000, 16, ARM_PARAM_TYPE_REG, "Rn" },
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },	
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t dsp_add_sub_pattern[] = {
@@ -62,7 +62,7 @@ static const arm_param_pattern_t dsp_add_sub_pattern[] = {
 	{ 0x000f0000, 16, ARM_PARAM_TYPE_REG, "Rn" },
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t dsp_mul_pattern[] = {
@@ -74,7 +74,7 @@ static const arm_param_pattern_t dsp_mul_pattern[] = {
 	{ 0x00000040,  6, ARM_PARAM_TYPE_UINT, "y" },
 	{ 0x00000020,  5, ARM_PARAM_TYPE_UINT, "x" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t mul_pattern[] = {
@@ -85,7 +85,7 @@ static const arm_param_pattern_t mul_pattern[] = {
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rn" },
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_REG, "Rs" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t mul_long_pattern[] = {
@@ -97,7 +97,7 @@ static const arm_param_pattern_t mul_long_pattern[] = {
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "RdLo" },
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_REG, "Rs" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t ls_hword_reg_off_pattern[] = {
@@ -109,7 +109,7 @@ static const arm_param_pattern_t ls_hword_reg_off_pattern[] = {
 	{ 0x000f0000, 16, ARM_PARAM_TYPE_REG, "Rn" },
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t ls_hword_imm_off_pattern[] = {
@@ -122,7 +122,7 @@ static const arm_param_pattern_t ls_hword_imm_off_pattern[] = {
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_UINT, "HiOffset" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_UINT, "LoOffset" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t ls_two_reg_off_pattern[] = {
@@ -134,7 +134,7 @@ static const arm_param_pattern_t ls_two_reg_off_pattern[] = {
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
 	{ 0x00000020,  5, ARM_PARAM_TYPE_UINT, "S" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t l_signed_reg_off_pattern[] = {
@@ -146,7 +146,7 @@ static const arm_param_pattern_t l_signed_reg_off_pattern[] = {
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
 	{ 0x00000020,  5, ARM_PARAM_TYPE_UINT, "H" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t ls_two_imm_off_pattern[] = {
@@ -159,7 +159,7 @@ static const arm_param_pattern_t ls_two_imm_off_pattern[] = {
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_UINT, "HiOffset" },
 	{ 0x00000020,  5, ARM_PARAM_TYPE_UINT, "S" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_UINT, "LoOffset" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t l_signed_imm_off_pattern[] = {
@@ -172,7 +172,7 @@ static const arm_param_pattern_t l_signed_imm_off_pattern[] = {
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_UINT, "HiOffset" },
 	{ 0x00000020,  5, ARM_PARAM_TYPE_UINT, "H" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_UINT, "LoOffset" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t move_imm_status_pattern[] = {
@@ -181,13 +181,13 @@ static const arm_param_pattern_t move_imm_status_pattern[] = {
 	{ 0x000f0000, 16, ARM_PARAM_TYPE_UINT, "mask" },
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_UINT, "rotate" },
 	{ 0x000000ff,  0, ARM_PARAM_TYPE_UINT, "immediate" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t branch_link_thumb_pattern[] = {
 	{ 0x01000000, 24, ARM_PARAM_TYPE_UINT, "H" },
 	{ 0x00ffffff,  0, ARM_PARAM_TYPE_UINT, "offset" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t data_reg_shift_pattern[] = {
@@ -199,7 +199,7 @@ static const arm_param_pattern_t data_reg_shift_pattern[] = {
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_REG, "Rs" },
 	{ 0x00000060,  5, ARM_PARAM_TYPE_UINT, "shift" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t cp_data_pattern[] = {
@@ -210,7 +210,7 @@ static const arm_param_pattern_t cp_data_pattern[] = {
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_UINT, "cp_num" },
 	{ 0x000000e0,  5, ARM_PARAM_TYPE_UINT, "opcode2" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_CPREG, "CRm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t cp_reg_pattern[] = {
@@ -222,7 +222,7 @@ static const arm_param_pattern_t cp_reg_pattern[] = {
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_UINT, "cp_num" },
 	{ 0x000000e0,  5, ARM_PARAM_TYPE_UINT, "opcode2" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_CPREG, "CRm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t data_imm_shift_pattern[] = {
@@ -234,7 +234,7 @@ static const arm_param_pattern_t data_imm_shift_pattern[] = {
 	{ 0x00000f80,  7, ARM_PARAM_TYPE_UINT, "shift amount" },
 	{ 0x00000060,  5, ARM_PARAM_TYPE_UINT, "shift" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t ls_reg_off_pattern[] = {
@@ -249,13 +249,13 @@ static const arm_param_pattern_t ls_reg_off_pattern[] = {
 	{ 0x00000f80,  7, ARM_PARAM_TYPE_UINT, "shift amount" },
 	{ 0x00000060,  5, ARM_PARAM_TYPE_UINT, "shift" },
 	{ 0x0000000f,  0, ARM_PARAM_TYPE_REG, "Rm" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t swi_pattern[] = {
 	{ 0xf0000000, 28, ARM_PARAM_TYPE_COND, "cond" },
 	{ 0x00ffffff,  0, ARM_PARAM_TYPE_UINT, "swi number" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t data_imm_pattern[] = {
@@ -266,7 +266,7 @@ static const arm_param_pattern_t data_imm_pattern[] = {
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_UINT, "rotate" },
 	{ 0x000000ff,  0, ARM_PARAM_TYPE_UINT, "immediate" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t ls_imm_off_pattern[] = {
@@ -279,7 +279,7 @@ static const arm_param_pattern_t ls_imm_off_pattern[] = {
 	{ 0x000f0000, 16, ARM_PARAM_TYPE_REG, "Rn" },
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_REG, "Rd" },
 	{ 0x00000fff,  0, ARM_PARAM_TYPE_UINT, "immediate" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t ls_multi_pattern[] = {
@@ -291,14 +291,14 @@ static const arm_param_pattern_t ls_multi_pattern[] = {
 	{ 0x00100000, 20, ARM_PARAM_TYPE_UINT, "L" },
 	{ 0x000f0000, 16, ARM_PARAM_TYPE_REG, "Rn" },
 	{ 0x0000ffff,  0, ARM_PARAM_TYPE_REGLIST, "register list" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t branch_link_pattern[] = {
 	{ 0xf0000000, 28, ARM_PARAM_TYPE_COND, "cond" },
 	{ 0x01000000, 24, ARM_PARAM_TYPE_UINT, "L" },
 	{ 0x00ffffff,  0, ARM_PARAM_TYPE_UINT, "offset" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 static const arm_param_pattern_t cp_ls_pattern[] = {
@@ -312,7 +312,7 @@ static const arm_param_pattern_t cp_ls_pattern[] = {
 	{ 0x0000f000, 12, ARM_PARAM_TYPE_CPREG, "CRd" },
 	{ 0x00000f00,  8, ARM_PARAM_TYPE_UINT, "cp_num" },
 	{ 0x000000ff,  0, ARM_PARAM_TYPE_UINT, "offset" },
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_PARAM_TYPE_NONE, NULL }
 };
 
 
@@ -388,7 +388,7 @@ static const arm_instr_pattern_t instr_pattern[] = {
 	{ 0x0e000000, 0x0c000000,
 	  ARM_INSTR_TYPE_CP_LS, cp_ls_pattern },
 
-	{ 0, 0, 0, NULL }
+	{ 0, 0, ARM_INSTR_TYPE_NONE, NULL }
 };
 
 

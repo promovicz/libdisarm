@@ -1,16 +1,16 @@
-/* basicblock.h */
+/* basicblock.hh */
 
-#ifndef _BASICBLOCK_H
-#define _BASICBLOCK_H
+#ifndef _BASICBLOCK_HH
+#define _BASICBLOCK_HH
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "hashtable.h"
-#include "image.h"
-#include "list.h"
-#include "types.h"
+#include "hashtable.hh"
+#include "image.hh"
+#include "list.hh"
+#include "types.hh"
 
 
 typedef struct {
@@ -37,4 +37,4 @@ int basicblock_analysis(hashtable_t *bb_ht, hashtable_t *sym_ht,
 			uint8_t *codemap);
 
 
-#endif /* ! _BASICBLOCK_H */
+#endif /* ! _BASICBLOCK_HH */

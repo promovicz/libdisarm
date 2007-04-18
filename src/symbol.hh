@@ -1,13 +1,13 @@
-/* symbol.h */
+/* symbol.hh */
 
-#ifndef _SYMBOL_H
-#define _SYMBOL_H
+#ifndef _SYMBOL_HH
+#define _SYMBOL_HH
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "hashtable.h"
-#include "types.h"
+#include "hashtable.hh"
+#include "types.hh"
 
 
 typedef struct {
@@ -22,4 +22,4 @@ int symbol_add(hashtable_t *sym_ht, arm_addr_t addr, const char *name,
 int symbol_add_from_file(hashtable_t *sym_ht, FILE *f);
 
 
-#endif /* ! _SYMBOL_H */
+#endif /* ! _SYMBOL_HH */

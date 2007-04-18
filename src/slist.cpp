@@ -1,5 +1,5 @@
 /*
- * hashtable.h - Hashtable header
+ * slist.cpp - Singly-linked list functions
  *
  * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
  *
@@ -18,36 +18,53 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _HASHTABLE_H
-#define _HASHTABLE_H
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "slist.h"
+#include "slist.hh"
 
 
-typedef struct {
-	slist_elm_t elm;
-	const void *key;
-	size_t len;
-} hashtable_elm_t;
+void
+slist_init(slist_t *list)
+{
+	list->head = NULL;
+}
 
-typedef struct {
-	slist_t *elms;
-	size_t size;
-	size_t load;
-} hashtable_t;
+slist_elm_t *
+slist_head(slist_t *list)
+{
+	return list->head;
+}
 
+void
+slist_prepend(slist_t *list, slist_elm_t *elm)
+{
+	elm->next = list->head;
+	list->head = elm;
+}
 
-int hashtable_init(hashtable_t *ht, size_t size);
-void hashtable_deinit(hashtable_t *ht);
-int hashtable_rehash(hashtable_t *ht, size_t size);
-hashtable_elm_t *hashtable_lookup(hashtable_t *ht,
-				  const void *key, size_t len);
-int hashtable_insert(hashtable_t *ht, hashtable_elm_t *helm,
-		     const void *key, size_t len, hashtable_elm_t **old_elm);
-int hashtable_remove(hashtable_t *ht, hashtable_elm_t *helm);
+void
+slist_elm_remove(slist_elm_t *elm, slist_elm_t *preelm)
+{
+	preelm->next = elm->next;
+	elm->next = NULL;
+}
 
+slist_elm_t *
+slist_remove_head(slist_t *list)
+{
+	if (slist_is_empty(list)) return NULL;
+	slist_elm_t *elm = slist_head(list);
+	slist_elm_remove(elm, (slist_elm_t *)list);
+	return elm;
+}
 
-#endif /* ! _HASHTABLE_H */
+int
+slist_is_empty(slist_t *list)
+{
+	return (list->head == NULL);
+}

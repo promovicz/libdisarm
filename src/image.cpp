@@ -1,6 +1,5 @@
-/* image.c */
+/* image.cpp */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,10 +10,10 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include "image.h"
-#include "endian.h"
-#include "hashtable.h"
-#include "types.h"
+#include "image.hh"
+#include "endian.hh"
+#include "hashtable.hh"
+#include "types.hh"
 
 
 image_t *
@@ -22,7 +21,7 @@ image_new(const char *filename, int big_endian)
 {
 	int r;
 
-	image_t *image = (image_t *)malloc(sizeof(image_t));
+	image_t *image = static_cast<image_t *>(malloc(sizeof(image_t)));
 	if (image == NULL) {
 		errno = ENOMEM;
 		return NULL;
@@ -120,8 +119,8 @@ image_add_annot(image_t *image, uint_t addr,
 		}
 		if (old != NULL) free(old);
 	} else {
-		annot->text = realloc(annot->text,
-				      annot->textlen + textlen + 1);
+		annot->text = static_cast<char *>
+			(realloc(annot->text, annot->textlen + textlen + 1));
 		if (annot->text == NULL) {
 			errno = ENOMEM;
 			return -1;

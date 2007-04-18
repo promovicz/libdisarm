@@ -1,19 +1,20 @@
-/* codesim.c */
+/* codesim.cpp */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
-#include "arm.h"
-#include "codesim.h"
-#include "types.h"
+#include "arm.hh"
+#include "codesim.hh"
+#include "types.hh"
 
 
 codesim_ctx_t *
 codesim_new(mem_read_func mem_read)
 {
-	codesim_ctx_t *codesim = malloc(sizeof(codesim_ctx_t));
+	codesim_ctx_t *codesim = static_cast<codesim_ctx_t *>
+		(malloc(sizeof(codesim_ctx_t)));
 	if (codesim == NULL) {
 		errno = ENOMEM;
 		return NULL;

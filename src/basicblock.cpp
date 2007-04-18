@@ -1,13 +1,13 @@
-/* basicblock.c */
+/* basicblock.cpp */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 
-#include "basicblock.h"
-#include "arm.h"
-#include "symbol.h"
-#include "types.h"
+#include "basicblock.hh"
+#include "arm.hh"
+#include "symbol.hh"
+#include "types.hh"
 
 
 static void
@@ -16,7 +16,7 @@ reference_add(hashtable_t *reflist_ht, hashtable_t *sym_ht,
 {
 	int r;
 
-	ref_elm_t *ref = malloc(sizeof(ref_elm_t));
+	ref_elm_t *ref = static_cast<ref_elm_t *>(malloc(sizeof(ref_elm_t)));
 	if (ref == NULL) abort();
 
 	ref->source = source;
@@ -26,7 +26,8 @@ reference_add(hashtable_t *reflist_ht, hashtable_t *sym_ht,
 	reflist_elm_t *reflist = (reflist_elm_t *)
 		hashtable_lookup(reflist_ht, &target, sizeof(arm_addr_t));
 	if (reflist == NULL) {
-		reflist = malloc(sizeof(reflist_elm_t));
+		reflist = static_cast<reflist_elm_t *>(
+			malloc(sizeof(reflist_elm_t)));
 		if (reflist == NULL) abort();
 		reflist->target = target;
 		list_init(&reflist->refs);
@@ -70,7 +71,8 @@ basicblock_add(hashtable_t *bb_ht, uint_t addr)
 	int r;
 	hashtable_elm_t *helm = hashtable_lookup(bb_ht, &addr, sizeof(uint_t));
 	if (helm == NULL) {
-		bb_elm_t *bb = malloc(sizeof(bb_elm_t));
+		bb_elm_t *bb = static_cast<bb_elm_t *>(
+			malloc(sizeof(bb_elm_t)));
 		if (bb == NULL) abort();
 		bb->addr = addr;
 
@@ -92,7 +94,8 @@ basicblock_analysis(hashtable_t *bb_ht, hashtable_t *sym_ht,
 {
 	int r;
 
-	bb_elm_t *entry_point = malloc(sizeof(bb_elm_t));
+	bb_elm_t *entry_point = static_cast<bb_elm_t *>(
+		malloc(sizeof(bb_elm_t)));
 	if (entry_point == NULL) abort();
 	entry_point->addr = 0x0;
 

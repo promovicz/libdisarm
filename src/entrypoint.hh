@@ -1,4 +1,4 @@
-/* entrypoint.h */
+/* entrypoint.hh */
 
 #ifndef _ENTRYPOINT_H
 #define _ENTRYPOINT_H
@@ -6,8 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "list.h"
-#include "types.h"
+#include "list.hh"
+#include "types.hh"
 
 
 typedef struct {

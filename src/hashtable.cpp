@@ -1,5 +1,5 @@
 /*
- * hashtable.c - Hashtable functions
+ * hashtable.cpp - Hashtable functions
  *
  * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
  *
@@ -28,8 +28,8 @@
 #include <string.h>
 #include <errno.h>
 
-#include "hashtable.h"
-#include "slist.h"
+#include "hashtable.hh"
+#include "slist.hh"
 
 #define REHASH_MAX_THRES  0.75
 #define REHASH_MIN_THRES  0.75

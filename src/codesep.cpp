@@ -1,6 +1,5 @@
-/* codesep.c */
+/* codesep.cpp */
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,12 +7,12 @@
 #include <ctype.h>
 #include <errno.h>
 
-#include "codesep.h"
-#include "arm.h"
-#include "entrypoint.h"
-#include "image.h"
-#include "list.h"
-#include "types.h"
+#include "codesep.hh"
+#include "arm.hh"
+#include "entrypoint.hh"
+#include "image.hh"
+#include "list.hh"
+#include "types.hh"
 
 #define CODESEP_CODE  0xff;
 #define CODESEP_DATA  0x7f;
@@ -90,7 +89,8 @@ separate_basic_block(image_t *image, list_t *stack, hashtable_t *dest_ht,
 					list_remove_head(destlist->dests);
 
 				bb_stack_elm_t *bbs =
-					malloc(sizeof(bb_stack_elm_t));
+					static_cast<bb_stack_elm_t *>
+					(malloc(sizeof(bb_stack_elm_t)));
 				if (bbs == NULL) abort();
 
 				bbs->addr = dest->addr;
@@ -134,7 +134,8 @@ separate_basic_block(image_t *image, list_t *stack, hashtable_t *dest_ht,
 
 				/* branch target */
 				bb_stack_elm_t *bbs =
-					malloc(sizeof(bb_stack_elm_t));
+					static_cast<bb_stack_elm_t *>
+					(malloc(sizeof(bb_stack_elm_t)));
 				if (bbs == NULL) abort();
 
 				bbs->addr = target;
@@ -217,7 +218,8 @@ jump_dest_add(hashtable_t *dest_ht, arm_addr_t addr, list_t *dests)
 {
 	int r;
 
-	destlist_elm_t *destlist = malloc(sizeof(destlist_elm_t));
+	destlist_elm_t *destlist = static_cast<destlist_elm_t *>
+		(malloc(sizeof(destlist_elm_t)));
 	if (destlist == NULL) {
 		errno = ENOMEM;
 		return -1;
@@ -275,7 +277,8 @@ read_jump_dest_from_file(hashtable_t *dest_ht, FILE *f)
 				return -1;
 			}
 
-			list_t *dests = malloc(sizeof(list_t));
+			list_t *dests = static_cast<list_t *>
+				(malloc(sizeof(list_t)));
 			if (dests == NULL) {
 				errno = ENOMEM;
 				return -1;
@@ -299,8 +302,8 @@ read_jump_dest_from_file(hashtable_t *dest_ht, FILE *f)
 					return -1;
 				}
 
-				dest_elm_t *destelm =
-					malloc(sizeof(dest_elm_t));
+				dest_elm_t *destelm = static_cast<dest_elm_t *>
+					(malloc(sizeof(dest_elm_t)));
 				if (destelm == NULL) {
 					errno = ENOMEM;
 					return -1;
@@ -344,7 +347,8 @@ codesep_analysis(list_t *ep_list, image_t *image,
 		}
 	}
 
-	*code_bitmap = calloc(image->size >> 2, sizeof(uint8_t));
+	*code_bitmap = static_cast<uint8_t *>
+		(calloc(image->size >> 2, sizeof(uint8_t)));
 	if (*code_bitmap == NULL) abort();
 
 	list_t stack;
@@ -353,7 +357,8 @@ codesep_analysis(list_t *ep_list, image_t *image,
 	list_elm_t *elm;
 	list_foreach(ep_list, elm) {
 		ep_elm_t *ep = (ep_elm_t *)elm;
-		bb_stack_elm_t *bbs = malloc(sizeof(bb_stack_elm_t));
+		bb_stack_elm_t *bbs = static_cast<bb_stack_elm_t *>
+			(malloc(sizeof(bb_stack_elm_t)));
 		if (bbs == NULL) abort();
 
 		bbs->addr = ep->addr;

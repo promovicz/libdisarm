@@ -1,5 +1,5 @@
 /*
- * list.h - List header
+ * list.hh - List header
  *
  * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
  *
@@ -18,8 +18,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _LIST_H
-#define _LIST_H
+#ifndef _LIST_HH
+#define _LIST_HH
 
 
 #define LIST_INIT(list)  \
@@ -66,4 +66,4 @@ list_elm_t *list_remove_tail(list_t *list);
 int list_is_empty(list_t *list);
 
 
-#endif /* ! _LIST_H */
+#endif /* ! _LIST_HH */

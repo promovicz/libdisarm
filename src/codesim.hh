@@ -1,9 +1,9 @@
-/* codesim.h */
+/* codesim.hh */
 
-#ifndef _CODESIM_H
-#define _CODESIM_H
+#ifndef _CODESIM_HH
+#define _CODESIM_HH
 
-#include "types.h"
+#include "types.hh"
 
 
 typedef int (*mem_read_func)(arm_addr_t addr, uint_t *val);
@@ -39,4 +39,4 @@ void codesim_undef_reg(codesim_ctx_t *codesim, codesim_reg_t reg);
 int codesim_get_reg(codesim_ctx_t *codesim, codesim_reg_t reg, uint_t *val);
 
 
-#endif /* ! _CODESIM_H */
+#endif /* ! _CODESIM_HH */

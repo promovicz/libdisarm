@@ -1,5 +1,5 @@
 /*
- * list.c - List functions
+ * list.cpp - List functions
  *
  * Copyright (C) 2006  Jon Lund Steffensen <jonls@users.sourceforge.net>
  *
@@ -25,7 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "list.h"
+#include "list.hh"
 
 
 void

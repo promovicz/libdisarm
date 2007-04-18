@@ -2,15 +2,15 @@
 bin_PROGRAMS = disarm
 
 disarm_SOURCES = \
-	src/disarm.c \
-	src/arm.c src/arm.h \
-	src/basicblock.c src/basicblock.h \
-	src/codesep.c src/codesep.h \
-	src/codesim.c src/codesim.h \
-	src/endian.h \
-	src/hashtable.c src/hashtable.h \
-	src/image.c src/image.h \
-	src/inter.c src/inter.h \
-	src/list.c src/list.h \
-	src/slist.c src/slist.h \
-	src/symbol.c src/symbol.h
+	src/disarm.cpp \
+	src/arm.cpp src/arm.hh \
+	src/basicblock.cpp src/basicblock.hh \
+	src/codesep.cpp src/codesep.hh \
+	src/codesim.cpp src/codesim.hh \
+	src/endian.hh \
+	src/hashtable.cpp src/hashtable.hh \
+	src/image.cpp src/image.hh \
+	src/inter.cpp src/inter.hh \
+	src/list.cpp src/list.hh \
+	src/slist.cpp src/slist.hh \
+	src/symbol.cpp src/symbol.hh

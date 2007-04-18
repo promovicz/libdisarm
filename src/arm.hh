@@ -1,17 +1,19 @@
-/* arm.h */
+/* arm.hh */
 
-#ifndef _ARM_H
-#define _ARM_H
+#ifndef _ARM_HH
+#define _ARM_HH
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdarg.h>
 
-#include "types.h"
+#include "types.hh"
 
 
 typedef enum {
+	ARM_INSTR_TYPE_NONE = 0,
+
 	/* Data processing immediate shift */
 	ARM_INSTR_TYPE_DATA_IMM_SHIFT,
 	/* Data processing register shift */
@@ -90,6 +92,7 @@ typedef enum {
 
 
 typedef enum {
+	ARM_PARAM_TYPE_NONE = 0,
 	ARM_PARAM_TYPE_UINT,
 	ARM_PARAM_TYPE_COND,
 	ARM_PARAM_TYPE_REG,
@@ -177,4 +180,4 @@ void arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t address,
 		      void *user_data);
 
 
-#endif /* ! _ARM_H */
+#endif /* ! _ARM_HH */

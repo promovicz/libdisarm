@@ -1,6 +1,6 @@
-/* disarm.c */
+/* disarm.cpp */
 
-#define _GNU_SOURCE
+//#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -9,16 +9,16 @@
 #include <ctype.h>
 #include <errno.h>
 
-#include "arm.h"
-#include "basicblock.h"
-#include "codesep.h"
+#include "arm.hh"
+#include "basicblock.hh"
+#include "codesep.hh"
 #include "endian.h"
-#include "entrypoint.h"
-#include "hashtable.h"
-#include "image.h"
-#include "list.h"
-#include "symbol.h"
-#include "types.h"
+#include "entrypoint.hh"
+#include "hashtable.hh"
+#include "image.hh"
+#include "list.hh"
+#include "symbol.hh"
+#include "types.hh"
 
 
 typedef struct {
@@ -139,7 +139,8 @@ main(int argc, char *argv[])
 	}
 
 	/* create address space mapping */
-	list_t img_map = LIST_INIT(img_map);
+	list_t img_map;
+	list_init(&img_map);
 	image_mapping_t *imap_elm =
 		(image_mapping_t *)malloc(sizeof(image_mapping_t));
 	imap_elm->image = image;
@@ -148,7 +149,8 @@ main(int argc, char *argv[])
 	list_prepend(&img_map, (list_elm_t *)imap_elm);
 
 	/* add arm entry points */
-	list_t ep_list = LIST_INIT(ep_list);
+	list_t ep_list;
+	list_init(&ep_list);
 	for (int i = 0; i < 0x20; i += 4) {
 		if (i == 0x14) continue;
 		r = entry_point_add(&ep_list, i);
@@ -318,8 +320,8 @@ main(int argc, char *argv[])
 				char *text = annot->text;
 				size_t textlen = annot->textlen;
 				while (*text != '\0') {
-					char *nl = memchr(text, '\n',
-							  textlen);
+					char *nl = static_cast<char *>(
+						memchr(text, '\n', textlen));
 					if (nl == NULL || nl-text == 0) {
 						break;
 					}
@@ -353,7 +355,8 @@ main(int argc, char *argv[])
 			char *text = annot->text;
 			size_t textlen = annot->textlen;
 			while (*text != '\0') {
-				char *nl = memchr(text, '\n', textlen);
+				char *nl = static_cast<char *>(
+					memchr(text, '\n', textlen));
 				if (nl == NULL || nl-text == 0) break;
 				printf("; %.*s\n", nl-text, text);
 				textlen -= nl - text - 1;
