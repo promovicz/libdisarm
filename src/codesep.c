@@ -15,6 +15,9 @@
 #include "list.h"
 #include "types.h"
 
+#define CODESEP_CODE  0xff;
+#define CODESEP_DATA  0x7f;
+
 
 typedef struct {
 	list_elm_t elm;
@@ -77,7 +80,7 @@ separate_basic_block(image_t *image, list_t *stack, hashtable_t *dest_ht,
 
 	while (1) {
 		if (code_bitmap[addr >> 2]) break;
-		code_bitmap[addr >> 2] = 0xff;
+		code_bitmap[addr >> 2] = CODESEP_CODE;
 
 		destlist_elm_t *destlist = (destlist_elm_t *)
 			hashtable_lookup(dest_ht, &addr, sizeof(arm_addr_t));

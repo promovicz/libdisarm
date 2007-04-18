@@ -29,6 +29,10 @@ typedef struct {
 } image_mapping_t;
 
 
+#define BLOCK_SEPARATOR  \
+  "; --------------------------------------------------------------------"
+
+
 static char *
 addr_string(arm_addr_t addr, void *data)
 {
@@ -189,17 +193,14 @@ main(int argc, char *argv[])
 	}
 
 	uint8_t *image_codemap;
-#if 0
 	r = codesep_analysis(&ep_list, image, &image_codemap, jump_file);
 	if (r < 0) {
 		perror("code_data_separate");
 		exit(EXIT_FAILURE);
 	}
-#endif
 
 	if (jump_file) fclose(jump_file);
 
-#if 0
 	FILE *codemap_out = fopen("code_bitmap", "wb");
 	if (codemap_out == NULL) return -1;
 	size_t write = fwrite(image_codemap, sizeof(uint8_t),
@@ -208,7 +209,6 @@ main(int argc, char *argv[])
 		fprintf(stderr, "Unable to write codemap.\n");
 	}
 	fclose(codemap_out);
-#endif
 
 	/* basic block analysis */
 	hashtable_t bb_ht;
@@ -246,7 +246,7 @@ main(int argc, char *argv[])
 		bb_elm_t *bb = (bb_elm_t *)
 			hashtable_lookup(&bb_ht, &i, sizeof(uint_t));
 		if (bb != NULL && i > 0) {
-			printf("\n");
+			printf("\n" BLOCK_SEPARATOR "\n");
 
 			r = hashtable_remove(&bb_ht, (hashtable_elm_t *)bb);
 			if (r < 0) {

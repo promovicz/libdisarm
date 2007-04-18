@@ -6,6 +6,7 @@ disarm_SOURCES = \
 	src/arm.c src/arm.h \
 	src/basicblock.c src/basicblock.h \
 	src/codesep.c src/codesep.h \
+	src/codesim.c src/codesim.h \
 	src/endian.h \
 	src/hashtable.c src/hashtable.h \
 	src/image.c src/image.h \
