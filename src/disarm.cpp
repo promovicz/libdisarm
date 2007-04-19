@@ -7,6 +7,9 @@
 #include <cctype>
 #include <cerrno>
 
+#include <iostream>
+#include <iomanip>
+
 #include "arm.hh"
 #include "basicblock.hh"
 #include "codesep.hh"
@@ -17,6 +20,8 @@
 #include "list.hh"
 #include "symbol.hh"
 #include "types.hh"
+
+using namespace std;
 
 
 typedef struct {
@@ -114,7 +119,8 @@ main(int argc, char *argv[])
 	/* load file */
 	image_t *image = image_new(&argv[1][1], (argv[1][0] == 'B' ? 1 : 0));
 	if (image == NULL) {
-		fprintf(stderr, "Unable to open file: `%s'.\n", &argv[1][1]);
+		cerr << "Unable to open file: `"
+		     << &argv[1][1] << "'." << endl;
 		perror("image_new");
 		exit(EXIT_FAILURE);
 	}
@@ -206,7 +212,7 @@ main(int argc, char *argv[])
 	size_t write = fwrite(image_codemap, sizeof(uint8_t),
 			      image->size >> 2, codemap_out);
 	if (write < (image->size >> 2)) {
-		fprintf(stderr, "Unable to write codemap.\n");
+		cerr << "Unable to write codemap." << endl;
 	}
 	fclose(codemap_out);
 
@@ -228,7 +234,7 @@ main(int argc, char *argv[])
 	r = basicblock_analysis(&bb_ht, &sym_ht, &reflist_ht, image,
 				image_codemap);
 	if (r < 0) {
-		fprintf(stderr, "Unable to finish basic block analysis.\n");
+		cerr << "Unable to finish basic block analysis." << endl;
 		exit(EXIT_FAILURE);
 	}
 
@@ -246,7 +252,7 @@ main(int argc, char *argv[])
 		bb_elm_t *bb = (bb_elm_t *)
 			hashtable_lookup(&bb_ht, &i, sizeof(uint_t));
 		if (bb != NULL && i > 0) {
-			printf("\n" BLOCK_SEPARATOR "\n");
+			cout << endl << BLOCK_SEPARATOR << endl;
 
 			r = hashtable_remove(&bb_ht, (hashtable_elm_t *)bb);
 			if (r < 0) {
@@ -265,21 +271,21 @@ main(int argc, char *argv[])
 				ref_elm_t *ref = (ref_elm_t *)
 					list_remove_head(&reflist->refs);
 				if (refs_printed == 0) {
-					printf("; reference from");
+					cout << "; reference from ";
 				} else if (refs_printed % 4 == 0) {
-					printf(",\n;\t\t");
+					cout << "," << endl << ";\t\t ";
 				} else {
-					printf(",");
+					cout << ", ";
 				}
 
 				char *sourcestr = addr_string(ref->source,
 							      &sym_ht);
 				if (sourcestr == NULL) abort();
 
-				printf(" %s(%s)%s", sourcestr,
-				       (ref->cond ? "C" : "U"),
-				       (ref->link ? "L" :
-					((i > ref->source) ? "F" : "B")));
+				cout << sourcestr
+				     << "(" << (ref->cond ? "C" : "U") << ")"
+				     << (ref->link ? "L" :
+					 ((i > ref->source) ? "F" : "B"));
 				refs_printed += 1;
 
 				free(sourcestr);
@@ -296,7 +302,7 @@ main(int argc, char *argv[])
 
 			free(reflist);
 		}
-		if (refs_printed > 0) printf("\n");
+		if (refs_printed > 0) cout << endl;
 
 		list_t post_annot_list;
 		list_init(&post_annot_list);
@@ -320,11 +326,12 @@ main(int argc, char *argv[])
 				while (*text != '\0') {
 					char *nl = static_cast<char *>(
 						memchr(text, '\n', textlen));
-					if (nl == NULL || nl-text == 0) {
+					if (nl == NULL || nl - text == 0) {
 						break;
 					}
 
-					printf("; %.*s\n", nl-text, text);
+					*nl = '\0';
+					cout << "; " << text << endl;
 					textlen -= nl - text - 1;
 					text = nl + 1;
 				}
@@ -339,10 +346,11 @@ main(int argc, char *argv[])
 		/* symbol */
 		sym_elm_t *sym = (sym_elm_t *)
 			hashtable_lookup(&sym_ht, &i, sizeof(arm_addr_t));
-		if (sym != NULL) printf("; %s:\n", sym->name);
+		if (sym != NULL) cout << "; " << sym->name << ":" << endl;
 
 		/* instruction */
-		printf("%08x\t%08x\t", i, instr);
+		cout << hex << setw(8) << setfill('0') << i << "\t"
+		     << hex << setw(8) << setfill('0') << instr << "\t";
 		arm_instr_fprint(stdout, instr, i, addr_string, &sym_ht);
 
 		while (!list_is_empty(&post_annot_list)) {
@@ -355,8 +363,10 @@ main(int argc, char *argv[])
 			while (*text != '\0') {
 				char *nl = static_cast<char *>(
 					memchr(text, '\n', textlen));
-				if (nl == NULL || nl-text == 0) break;
-				printf("; %.*s\n", nl-text, text);
+				if (nl == NULL || nl - text == 0) break;
+
+				*nl = '\0';
+				cout << "; " << text << endl;
 				textlen -= nl - text - 1;
 				text = nl + 1;
 			}
