@@ -14,33 +14,42 @@
 using namespace std;
 
 
-static void
-reference_add(map<arm_addr_t, list<ref_t *> *> *ref_list_map,
-	      map<arm_addr_t, char *> *sym_map,
-	      arm_addr_t source, arm_addr_t target, bool cond, bool link)
+template <typename ref_t> static void
+reference_add(map<arm_addr_t, list<ref_t *> *> *refs_map,
+	      arm_addr_t key, ref_t *ref)
 {
-	int r;
-
-	ref_t *ref = new ref_t;
-	if (ref == NULL) abort();
-
-	ref->source = source;
-	ref->cond = cond;
-	ref->link = link;
-
-	map<arm_addr_t, list<ref_t *> *>::iterator ref_list_pos =
-		ref_list_map->find(target);
+	typename map<arm_addr_t, list<ref_t *> *>::iterator refs_pos =
+		refs_map->find(key);
 	list<ref_t *> *ref_list;
-	if (ref_list_pos == ref_list_map->end()) {
+	if (refs_pos == refs_map->end()) {
 		ref_list = new list<ref_t *>;
 		if (ref_list == NULL) abort();
 
-		(*ref_list_map)[target] = ref_list;
+		(*refs_map)[key] = ref_list;
 	} else {
-		ref_list = (*ref_list_pos).second;
+		ref_list = (*refs_pos).second;
 	}
 
 	ref_list->push_back(ref);
+}
+
+static void
+reference_code_add(map<arm_addr_t, list<ref_code_t *> *> *coderefs_map,
+		   map<arm_addr_t, char *> *sym_map,
+		   arm_addr_t source, arm_addr_t target,
+		   bool cond, bool link)
+{
+	int r;
+
+	ref_code_t *ref = new ref_code_t;
+	if (ref == NULL) abort();
+
+	ref->source = source;
+	ref->target = target;
+	ref->cond = cond;
+	ref->link = link;
+
+	reference_add<ref_code_t>(coderefs_map, target, ref);
 
 	if (link) {
 		char *funname = NULL;
@@ -64,17 +73,31 @@ reference_add(map<arm_addr_t, list<ref_t *> *> *ref_list_map,
 }
 
 static void
+reference_data_add(map<arm_addr_t, list<ref_data_t *> *> *datarefs_map,
+		   arm_addr_t source, arm_addr_t target)
+{
+	ref_data_t *ref = new ref_data_t;
+	if (ref == NULL) abort();
+
+	ref->source = source;
+	ref->target = target;
+
+	reference_add<ref_data_t>(datarefs_map, target, ref);
+}
+
+static void
 basicblock_add(map<arm_addr_t, bool> *bb_map, arm_addr_t addr)
 {
 	(*bb_map)[addr] = true;
 }
 
 int
-basicblock_initial_analysis(map<arm_addr_t, bool> *bb_map,
-			    list<arm_addr_t> *entrypoints,
-			    map<arm_addr_t, char *> *sym_map,
-			    map<arm_addr_t, list<ref_t *> *> *reflist_map,
-			    image_t *image)
+bb_instr_analysis(map<arm_addr_t, bool> *bb_map,
+		  list<arm_addr_t> *entrypoints,
+		  map<arm_addr_t, char *> *sym_map,
+		  map<arm_addr_t, list<ref_code_t *> *> *coderefs_map,
+		  map<arm_addr_t, list<ref_data_t *> *> *datarefs_map,
+		  image_t *image)
 {
 	int r;
 
@@ -111,17 +134,17 @@ basicblock_initial_analysis(map<arm_addr_t, bool> *bb_map,
 
 			if (link || cond != ARM_COND_AL) {
 				/* fall-through reference */
-				reference_add(reflist_map, sym_map, i,
-					      i + sizeof(arm_instr_t),
-					      false, false);
+				reference_code_add(coderefs_map, sym_map, i,
+						   i + sizeof(arm_instr_t),
+						   false, false);
 			}
 
 			/* basic block for branch target */
 			basicblock_add(bb_map, target);
 
 			/* target reference */
-			reference_add(reflist_map, sym_map, i, target,
-				      (cond != ARM_COND_AL), link);
+			reference_code_add(coderefs_map, sym_map, i, target,
+					   (cond != ARM_COND_AL), link);
 		} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_IMM) {
@@ -133,14 +156,18 @@ basicblock_initial_analysis(map<arm_addr_t, bool> *bb_map,
 
 				if (cond != ARM_COND_AL) {
 					/* fall-through reference */
-					reference_add(reflist_map, sym_map, i,
-						      i + sizeof(arm_instr_t),
-						      true, false);
+					reference_code_add(coderefs_map,
+							   sym_map, i,
+							   i +
+							   sizeof(arm_instr_t),
+							   true, false);
 				}
 			}
 		} else if (ip->type == ARM_INSTR_TYPE_LS_REG_OFF ||
 			   ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
 			int cond = arm_instr_get_param(instr, ip, 0);
+			int u = arm_instr_get_param(instr, ip, 2);
+			int rn = arm_instr_get_param(instr, ip, 6);
 			int rd = arm_instr_get_param(instr, ip, 7);
 			if (rd == 15) {
 				basicblock_add(bb_map,
@@ -148,10 +175,20 @@ basicblock_initial_analysis(map<arm_addr_t, bool> *bb_map,
 
 				if (cond != ARM_COND_AL) {
 					/* fall-through reference */
-					reference_add(reflist_map, sym_map, i,
-						      i + sizeof(arm_instr_t),
-						      true, false);
+					reference_code_add(coderefs_map,
+							   sym_map, i,
+							   i +
+							   sizeof(arm_instr_t),
+							   true, false);
 				}
+			}
+
+			if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF &&
+			    rn == 15 && cond != ARM_COND_NV) {
+				int imm = arm_instr_get_param(instr, ip, 8);
+				arm_addr_t target = i + 8 +
+					(imm * (u ? 1 : -1));
+				reference_data_add(datarefs_map, i, target);
 			}
 		} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
 			int cond = arm_instr_get_param(instr, ip, 0);
@@ -163,9 +200,11 @@ basicblock_initial_analysis(map<arm_addr_t, bool> *bb_map,
 
 				if (cond != ARM_COND_AL) {
 					/* fall-through reference */
-					reference_add(reflist_map, sym_map, i,
-						      i + sizeof(arm_instr_t),
-						      true, false);
+					reference_code_add(coderefs_map,
+							   sym_map, i,
+							   i +
+							   sizeof(arm_instr_t),
+							   true, false);
 				}
 			}
 		}

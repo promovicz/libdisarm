@@ -129,6 +129,18 @@ main(int argc, char *argv[])
 		fclose(symbol_file);
 	}
 
+	/* basic block analysis */
+	map<arm_addr_t, bool> bb_map;
+	map<arm_addr_t, list<ref_code_t *> *> coderefs_map;
+	map<arm_addr_t, list<ref_data_t *> *> datarefs_map;
+
+	r = bb_instr_analysis(&bb_map, &ep_list, &sym_map,
+			      &coderefs_map, &datarefs_map, image);
+	if (r < 0) {
+		cerr << "Unable to finish basic block analysis." << endl;
+		exit(EXIT_FAILURE);
+	}
+
 	/* code/data separation */
 	FILE *jump_file = NULL;
 	if (argc >= 5) {
@@ -157,17 +169,6 @@ main(int argc, char *argv[])
 	}
 	fclose(codemap_out);
 
-	/* basic block analysis */
-	map<arm_addr_t, bool> bb_map;
-	map<arm_addr_t, list<ref_t *> *> ref_list_map;
-
-	r = basicblock_initial_analysis(&bb_map, &ep_list, &sym_map,
-					&ref_list_map, image);
-	if (r < 0) {
-		cerr << "Unable to finish basic block analysis." << endl;
-		exit(EXIT_FAILURE);
-	}
-
 	/* print instructions */
 	uint_t i = 0;
 	while (1) {
@@ -176,7 +177,8 @@ main(int argc, char *argv[])
 		if (r == 0) break;
 		else if (r < 0) return -1;
 
-		int refs_printed = 0;
+		uint_t coderefs_printed = 0;
+		uint_t datarefs_printed = 0;
 
 		/* basic block */
 		map<arm_addr_t, bool>::iterator bb_pos = bb_map.find(i);
@@ -185,18 +187,18 @@ main(int argc, char *argv[])
 			bb_map.erase(bb_pos);
 		}
 
-		/* references */
-		map<arm_addr_t, list<ref_t *> *>::iterator ref_list_pos =
-			ref_list_map.find(i);
-		if (ref_list_pos != ref_list_map.end()) {
-			list<ref_t *> *ref_list = (*ref_list_pos).second;
+		/* code references */
+		map<arm_addr_t, list<ref_code_t *> *>::iterator coderefs_pos =
+			coderefs_map.find(i);
+		if (coderefs_pos != coderefs_map.end()) {
+			list<ref_code_t *> *ref_list = (*coderefs_pos).second;
 			while (!ref_list->empty()) {
-				ref_t *ref = ref_list->front();
+				ref_code_t *ref = ref_list->front();
 				ref_list->pop_front();
 
-				if (refs_printed == 0) {
-					cout << "; reference from ";
-				} else if (refs_printed % 4 == 0) {
+				if (coderefs_printed == 0) {
+					cout << "; code reference from ";
+				} else if (coderefs_printed % 4 == 0) {
 					cout << "," << endl << ";\t\t ";
 				} else {
 					cout << ", ";
@@ -210,18 +212,53 @@ main(int argc, char *argv[])
 				     << "(" << (ref->cond ? "C" : "U") << ")"
 				     << (ref->link ? "L" :
 					 ((i > ref->source) ? "F" : "B"));
-				refs_printed += 1;
+				coderefs_printed += 1;
 
 				free(sourcestr);
 
 				delete ref;
 			}
 
-			ref_list_map.erase(ref_list_pos);
+			coderefs_map.erase(coderefs_pos);
 
 			delete ref_list;
 		}
-		if (refs_printed > 0) cout << endl;
+		if (coderefs_printed > 0) cout << endl;
+
+		/* data references */
+		map<arm_addr_t, list<ref_data_t *> *>::iterator datarefs_pos =
+			datarefs_map.find(i);
+		if (datarefs_pos != datarefs_map.end()) {
+			list<ref_data_t *> *ref_list = (*datarefs_pos).second;
+			while (!ref_list->empty()) {
+				ref_data_t *ref = ref_list->front();
+				ref_list->pop_front();
+
+				if (datarefs_printed == 0) {
+					cout << "; data reference from ";
+				} else if (datarefs_printed % 4 == 0) {
+					cout << "," << endl << ";\t\t ";
+				} else {
+					cout << ", ";
+				}
+
+				char *sourcestr = arm_addr_string(ref->source,
+								  &sym_map);
+				if (sourcestr == NULL) abort();
+
+				cout << sourcestr;
+				datarefs_printed += 1;
+
+				free(sourcestr);
+
+				delete ref;
+			}
+
+			datarefs_map.erase(datarefs_pos);
+
+			delete ref_list;
+		}
+		if (datarefs_printed > 0) cout << endl;
 
 		/* find annotations */
 		map<arm_addr_t, annot_t *>::iterator annot_pos =
@@ -232,6 +269,7 @@ main(int argc, char *argv[])
 			image->annot_map->erase(annot_pos);
 		}
 
+		/* pre annotation */
 		if (annot != NULL && annot->pre_text != NULL) {
 			char *text = annot->pre_text;
 			size_t textlen = annot->pre_textlen;
@@ -260,7 +298,7 @@ main(int argc, char *argv[])
 		     << hex << setw(8) << setfill('0') << instr << "\t";
 		arm_instr_fprint(stdout, instr, i, &sym_map);
 
-		/* post annotations */
+		/* post annotation */
 		if (annot != NULL && annot->post_text != NULL) {
 			char *text = annot->post_text;
 			size_t textlen = annot->post_textlen;
@@ -287,22 +325,6 @@ main(int argc, char *argv[])
 	image_free(image);
 	delete imap_elm;
 
-	/* clean up references */
-	uint_t refs_cleaned = 0;
-	map<arm_addr_t, list<ref_t *> *>::iterator ref_list_iter;
-	for (ref_list_iter = ref_list_map.begin();
-	     ref_list_iter != ref_list_map.end(); ref_list_iter++) {
-		list<ref_t *> *ref_list = (*ref_list_iter).second;
-		list<ref_t *>::iterator ref_iter;
-		for (ref_iter = ref_list->begin();
-		     ref_iter != ref_list->end(); ref_iter++) {
-			ref_t *ref = *ref_iter;
-			delete ref;
-			refs_cleaned += 1;
-		}
-		delete ref_list;
-	}
-
 	/* clean up symbols */
 	uint_t syms_cleaned = 0;
 	for (map<arm_addr_t, char *>::iterator sym_iter = sym_map.begin();
@@ -313,8 +335,7 @@ main(int argc, char *argv[])
 	}
 
 	cout << "Done. Cleaned: " << dec
-	     << "refs: " << refs_cleaned
-	     << ", syms: " << syms_cleaned << endl;
+	     << "syms: " << syms_cleaned << endl;
 
 	return EXIT_SUCCESS;
 }
