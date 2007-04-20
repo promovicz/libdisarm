@@ -9,15 +9,14 @@
 
 #include <iostream>
 #include <iomanip>
+#include <list>
+#include <map>
 
 #include "arm.hh"
 #include "basicblock.hh"
 #include "codesep.hh"
 #include "endian.h"
-#include "entrypoint.hh"
-#include "hashtable.hh"
 #include "image.hh"
-#include "list.hh"
 #include "symbol.hh"
 #include "types.hh"
 
@@ -25,7 +24,6 @@ using namespace std;
 
 
 typedef struct {
-	list_elm_t elm;
 	image_t *image;
 	arm_addr_t addr;
 	uint_t size;
@@ -36,50 +34,12 @@ typedef struct {
   "; --------------------------------------------------------------------"
 
 
-static char *
-addr_string(arm_addr_t addr, void *data)
-{
-	char *addrstr = NULL;
-	int r;
-
-	hashtable_t *sym_ht = (hashtable_t *)data;
-
-	sym_elm_t *sym = (sym_elm_t *)hashtable_lookup(sym_ht, &addr,
-						       sizeof(arm_addr_t));
-	if (sym != NULL) {
-		static const char *format = "<%s>";
-
-		r = snprintf(NULL, 0, format, sym->name);
-		if (r > 0) {
-			addrstr = (char *)malloc((r+1)*sizeof(char));
-			if (addrstr == NULL) abort();
-			r = snprintf(addrstr, r+1, format, sym->name);
-		}
-	} else {
-		static const char *format = "0x%x";
-
-		r = snprintf(NULL, 0, format, addr);
-		if (r > 0) {
-			addrstr = (char *)malloc((r+1)*sizeof(char));
-			if (addrstr == NULL) abort();
-			r = snprintf(addrstr, r+1, format, addr);
-		}
-	}
-
-	if (r <= 0) {
-		if (addrstr != NULL) free(addrstr);
-		return NULL;
-	}
-
-	return addrstr;
-}
-
 static image_t *
-image_for_addr(list_t *img_map, uint_t *addr)
+image_for_addr(list<image_mapping_t *> *img_map, uint_t *addr)
 {
-	list_elm_t *elm;
-	list_foreach(img_map, elm) {
-		image_mapping_t *imap_elm = (image_mapping_t *)elm;
+	list<image_mapping_t *>::iterator iter;
+	for (iter = img_map->begin(); iter != img_map->end(); iter++) {
+		image_mapping_t *imap_elm = *iter;
 		if (*addr >= imap_elm->addr &&
 		    *addr < imap_elm->addr + imap_elm->size) {
 			*addr -= imap_elm->addr;
@@ -91,19 +51,9 @@ image_for_addr(list_t *img_map, uint_t *addr)
 }
 
 static int
-entry_point_add(list_t *ep_list, uint_t addr)
+entry_point_add(list<arm_addr_t> *ep_list, arm_addr_t addr)
 {
-	int r;
-
-	ep_elm_t *ep = (ep_elm_t *)malloc(sizeof(ep_elm_t));
-	if (ep == NULL) {
-		errno = ENOMEM;
-		return -1;
-	}
-
-	ep->addr = addr;
-
-	list_prepend(ep_list, (list_elm_t *)ep);
+	ep_list->push_front(addr);
 
 	return 0;
 }
@@ -143,19 +93,16 @@ main(int argc, char *argv[])
 	}
 
 	/* create address space mapping */
-	list_t img_map;
-	list_init(&img_map);
-	image_mapping_t *imap_elm =
-		(image_mapping_t *)malloc(sizeof(image_mapping_t));
+	list<image_mapping_t *> img_map;
+	image_mapping_t *imap_elm = new image_mapping_t;
 	imap_elm->image = image;
 	imap_elm->addr = 0;
 	imap_elm->size = image->size;
-	list_prepend(&img_map, (list_elm_t *)imap_elm);
+	img_map.push_back(imap_elm);
 
 	/* add arm entry points */
-	list_t ep_list;
-	list_init(&ep_list);
-	for (int i = 0; i < 0x20; i += 4) {
+	list<arm_addr_t> ep_list;
+	for (arm_addr_t i = 0; i < 0x20; i += 4) {
 		if (i == 0x14) continue;
 		r = entry_point_add(&ep_list, i);
 		if (r < 0) {
@@ -165,13 +112,7 @@ main(int argc, char *argv[])
 	}
 
 	/* load symbols */
-	hashtable_t sym_ht;
-	r = hashtable_init(&sym_ht, 0);
-	if (r < 0) {
-		perror("hashtable_init");
-		exit(EXIT_FAILURE);
-	}
-
+	map<arm_addr_t, char *> sym_map;
 	if (argc >= 4) {
 		FILE *symbol_file = fopen(argv[3], "r");
 		if (symbol_file == NULL) {
@@ -179,7 +120,7 @@ main(int argc, char *argv[])
 			exit(EXIT_FAILURE);
 		}
 
-		r = symbol_add_from_file(&sym_ht, symbol_file);
+		r = symbol_add_from_file(&sym_map, symbol_file);
 		if (r < 0) {
 			perror("symbol_add_from_file");
 			exit(EXIT_FAILURE);
@@ -217,21 +158,10 @@ main(int argc, char *argv[])
 	fclose(codemap_out);
 
 	/* basic block analysis */
-	hashtable_t bb_ht;
-	r = hashtable_init(&bb_ht, 0);
-	if (r < 0) {
-		perror("hashtable_init");
-		exit(EXIT_FAILURE);
-	}
+	map<arm_addr_t, bool> bb_map;
+	map<arm_addr_t, list<ref_t *> *> ref_list_map;
 
-	hashtable_t reflist_ht;
-	r = hashtable_init(&reflist_ht, 0);
-	if (r < 0) {
-		perror("hashtable_init");
-		exit(EXIT_FAILURE);
-	}
-
-	r = basicblock_analysis(&bb_ht, &sym_ht, &reflist_ht, image,
+	r = basicblock_analysis(&bb_map, &sym_map, &ref_list_map, image,
 				image_codemap);
 	if (r < 0) {
 		cerr << "Unable to finish basic block analysis." << endl;
@@ -249,27 +179,21 @@ main(int argc, char *argv[])
 		int refs_printed = 0;
 
 		/* basic block */
-		bb_elm_t *bb = (bb_elm_t *)
-			hashtable_lookup(&bb_ht, &i, sizeof(uint_t));
-		if (bb != NULL && i > 0) {
+		map<arm_addr_t, bool>::iterator bb_pos = bb_map.find(i);
+		if (bb_pos != bb_map.end() && i > 0) {
 			cout << endl << BLOCK_SEPARATOR << endl;
-
-			r = hashtable_remove(&bb_ht, (hashtable_elm_t *)bb);
-			if (r < 0) {
-				perror("hashtable_remove");
-				exit(EXIT_FAILURE);
-			}
-
-			free(bb);
+			bb_map.erase(bb_pos);
 		}
 
 		/* references */
-		reflist_elm_t *reflist = (reflist_elm_t *)
-			hashtable_lookup(&reflist_ht, &i, sizeof(uint_t));
-		if (reflist != NULL) {
-			while (!list_is_empty(&reflist->refs)) {
-				ref_elm_t *ref = (ref_elm_t *)
-					list_remove_head(&reflist->refs);
+		map<arm_addr_t, list<ref_t *> *>::iterator ref_list_pos =
+			ref_list_map.find(i);
+		if (ref_list_pos != ref_list_map.end()) {
+			list<ref_t *> *ref_list = (*ref_list_pos).second;
+			while (!ref_list->empty()) {
+				ref_t *ref = ref_list->front();
+				ref_list->pop_front();
+
 				if (refs_printed == 0) {
 					cout << "; reference from ";
 				} else if (refs_printed % 4 == 0) {
@@ -278,8 +202,8 @@ main(int argc, char *argv[])
 					cout << ", ";
 				}
 
-				char *sourcestr = addr_string(ref->source,
-							      &sym_ht);
+				char *sourcestr = arm_addr_string(ref->source,
+								  &sym_map);
 				if (sourcestr == NULL) abort();
 
 				cout << sourcestr
@@ -290,76 +214,27 @@ main(int argc, char *argv[])
 
 				free(sourcestr);
 
-				free(ref);
+				delete ref;
 			}
 
-			r = hashtable_remove(&reflist_ht,
-					     (hashtable_elm_t *)reflist);
-			if (r < 0) {
-				perror("hashtable_remove");
-				exit(EXIT_FAILURE);
-			}
+			ref_list_map.erase(ref_list_pos);
 
-			free(reflist);
+			delete ref_list;
 		}
 		if (refs_printed > 0) cout << endl;
 
-		list_t post_annot_list;
-		list_init(&post_annot_list);
-		while (1) {
-			/* pre annotations */
-			annot_elm_t *annot = (annot_elm_t *)
-				hashtable_lookup(&image->annot_ht, &i,
-						 sizeof(uint_t));
-			if (annot == NULL) break;
-
-			r = hashtable_remove(&image->annot_ht,
-					     (hashtable_elm_t *)annot);
-			if (r < 0) {
-				perror("hashtable_remove");
-				exit(EXIT_FAILURE);
-			}
-
-			if (annot->pre) {
-				char *text = annot->text;
-				size_t textlen = annot->textlen;
-				while (*text != '\0') {
-					char *nl = static_cast<char *>(
-						memchr(text, '\n', textlen));
-					if (nl == NULL || nl - text == 0) {
-						break;
-					}
-
-					*nl = '\0';
-					cout << "; " << text << endl;
-					textlen -= nl - text - 1;
-					text = nl + 1;
-				}
-				free(annot->text);
-				free(annot);
-			} else {
-				list_append(&post_annot_list,
-					    (list_elm_t *)annot);
-			}
+		/* find annotations */
+		map<arm_addr_t, annot_t *>::iterator annot_pos =
+			image->annot_map->find(i);
+		annot_t *annot = NULL;
+		if (annot_pos != image->annot_map->end()) {
+			annot = (*annot_pos).second;
+			image->annot_map->erase(annot_pos);
 		}
 
-		/* symbol */
-		sym_elm_t *sym = (sym_elm_t *)
-			hashtable_lookup(&sym_ht, &i, sizeof(arm_addr_t));
-		if (sym != NULL) cout << "; " << sym->name << ":" << endl;
-
-		/* instruction */
-		cout << hex << setw(8) << setfill('0') << i << "\t"
-		     << hex << setw(8) << setfill('0') << instr << "\t";
-		arm_instr_fprint(stdout, instr, i, addr_string, &sym_ht);
-
-		while (!list_is_empty(&post_annot_list)) {
-			/* post annotations */
-			annot_elm_t *annot = (annot_elm_t *)
-				list_remove_head(&post_annot_list);
-
-			char *text = annot->text;
-			size_t textlen = annot->textlen;
+		if (annot != NULL && annot->pre_text != NULL) {
+			char *text = annot->pre_text;
+			size_t textlen = annot->pre_textlen;
 			while (*text != '\0') {
 				char *nl = static_cast<char *>(
 					memchr(text, '\n', textlen));
@@ -370,19 +245,76 @@ main(int argc, char *argv[])
 				textlen -= nl - text - 1;
 				text = nl + 1;
 			}
-			free(annot->text);
-			free(annot);
+			free(annot->pre_text);
 		}
+
+		/* symbol */
+		map<arm_addr_t, char *>::iterator sym = sym_map.find(i);
+		if (sym != sym_map.end()) {
+			const char *sym_name = (*sym).second;
+			cout << "; " << sym_name << ":" << endl;
+		}
+
+		/* instruction */
+		cout << hex << setw(8) << setfill('0') << i << "\t"
+		     << hex << setw(8) << setfill('0') << instr << "\t";
+		arm_instr_fprint(stdout, instr, i, &sym_map);
+
+		/* post annotations */
+		if (annot != NULL && annot->post_text != NULL) {
+			char *text = annot->post_text;
+			size_t textlen = annot->post_textlen;
+			while (*text != '\0') {
+				char *nl = static_cast<char *>(
+					memchr(text, '\n', textlen));
+				if (nl == NULL || nl - text == 0) break;
+				
+				*nl = '\0';
+				cout << "; " << text << endl;
+				textlen -= nl - text - 1;
+				text = nl + 1;
+			}
+			free(annot->post_text);
+		}
+
+		/* clean up annotations */
+		if (annot != NULL) delete annot;
 
 		i += sizeof(arm_instr_t);
 	}
 
 	/* clean up */
 	image_free(image);
-	hashtable_deinit(&bb_ht);
-	hashtable_deinit(&reflist_ht);
-	hashtable_deinit(&sym_ht);
+	delete imap_elm;
 
+	/* clean up references */
+	uint_t refs_cleaned = 0;
+	map<arm_addr_t, list<ref_t *> *>::iterator ref_list_iter;
+	for (ref_list_iter = ref_list_map.begin();
+	     ref_list_iter != ref_list_map.end(); ref_list_iter++) {
+		list<ref_t *> *ref_list = (*ref_list_iter).second;
+		list<ref_t *>::iterator ref_iter;
+		for (ref_iter = ref_list->begin();
+		     ref_iter != ref_list->end(); ref_iter++) {
+			ref_t *ref = *ref_iter;
+			delete ref;
+			refs_cleaned += 1;
+		}
+		delete ref_list;
+	}
+
+	/* clean up symbols */
+	uint_t syms_cleaned = 0;
+	for (map<arm_addr_t, char *>::iterator sym_iter = sym_map.begin();
+	     sym_iter != sym_map.end(); sym_iter++) {
+		char *sym_name = (*sym_iter).second;
+		free(sym_name);
+		syms_cleaned += 1;
+	}
+
+	cout << "Done. Cleaned: " << dec
+	     << "refs: " << refs_cleaned
+	     << ", syms: " << syms_cleaned << endl;
 
 	return EXIT_SUCCESS;
 }

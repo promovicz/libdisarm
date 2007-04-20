@@ -3,12 +3,15 @@
 #ifndef _CODESEP_HH
 #define _CODESEP_HH
 
+#include <list>
+
 #include "image.hh"
-#include "list.hh"
 #include "types.hh"
 
+using namespace std;
 
-int codesep_analysis(list_t *ep_list, image_t *image,
+
+int codesep_analysis(list<arm_addr_t> *ep_list, image_t *image,
 		     uint8_t **code_bitmap, FILE *f);
 
 

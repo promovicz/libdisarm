@@ -11,18 +11,22 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
+#include <iostream>
+#include <map>
+
 #include "image.hh"
 #include "endian.hh"
-#include "hashtable.hh"
 #include "types.hh"
+
+using namespace std;
 
 
 image_t *
-image_new(const char *filename, int big_endian)
+image_new(const char *filename, bool big_endian)
 {
 	int r;
 
-	image_t *image = static_cast<image_t *>(malloc(sizeof(image_t)));
+	image_t *image = new image_t;
 	if (image == NULL) {
 		errno = ENOMEM;
 		return NULL;
@@ -31,7 +35,7 @@ image_new(const char *filename, int big_endian)
 	image->file = fopen(filename, "rb");
 	if (image->file == NULL) {
 		int errsave = errno;
-		free(image);
+		delete image;
 		errno = errsave;
 		return NULL;
 	}
@@ -41,7 +45,7 @@ image_new(const char *filename, int big_endian)
 	if (r < 0) {
 		int errsave = errno;
 		fclose(image->file);
-		free(image);
+		delete image;
 		errno = errsave;
 		return NULL;
 	}
@@ -52,15 +56,14 @@ image_new(const char *filename, int big_endian)
 	if (image->data == MAP_FAILED) {
 		int errsv = errno;
 		fclose(image->file);
-		free(image);
+		delete image;
 		errno = errsv;
 		return NULL;
 	}
 
 	image->big_endian = big_endian;
 
-	r = hashtable_init(&image->annot_ht, 0);
-	if (r < 0) return NULL;
+	image->annot_map = new map<arm_addr_t, annot_t *>();
 
 	return image;
 }
@@ -68,10 +71,10 @@ image_new(const char *filename, int big_endian)
 void
 image_free(image_t *image)
 {
-	hashtable_deinit(&image->annot_ht);
-	munmap(image->data, image->size);       
+	delete image->annot_map;
+	munmap(image->data, image->size);
 	fclose(image->file);
-	free(image);
+	delete image;
 }
 
 int
@@ -91,47 +94,58 @@ image_read_instr(image_t *image, uint_t addr, arm_instr_t *instr)
 }
 
 int
-image_add_annot(image_t *image, uint_t addr,
-		char *text, size_t textlen, int pre)
+image_add_annot(image_t *image, arm_addr_t addr,
+		char *text, size_t textlen, bool pre)
 {
 	int r;
-	hashtable_t *annot_ht = &image->annot_ht;
-	annot_elm_t *annot = (annot_elm_t *)
-		hashtable_lookup(annot_ht, &addr, sizeof(uint_t));
+	map<arm_addr_t, annot_t *>::iterator annot_pos =
+		image->annot_map->find(addr);
 
-	if (annot == NULL || annot->pre != pre) {
-		annot = (annot_elm_t *)malloc(sizeof(annot_elm_t));
+	if (annot_pos == image->annot_map->end()) {
+		annot_t *annot = new annot_t;
 		if (annot == NULL) {
 			errno = ENOMEM;
 			return -1;
 		}
 
-		annot->addr = addr;
-		annot->pre = pre;
-		annot->text = text;
-		annot->textlen = textlen;
-
-		hashtable_elm_t *old;
-		r = hashtable_insert(annot_ht, (hashtable_elm_t *)annot,
-				     &annot->addr, sizeof(uint_t), &old);
-		if (r < 0) {
-			perror("hashtable_insert");
-			exit(EXIT_FAILURE);
+		if (pre) {
+			annot->pre_text = text;
+			annot->pre_textlen = textlen;
+			annot->post_text = NULL;
+			annot->post_textlen = 0;
+		} else {
+			annot->pre_text = NULL;
+			annot->pre_textlen = 0;
+			annot->post_text = text;
+			annot->post_textlen = textlen;
 		}
-		if (old != NULL) free(old);
+
+		(*image->annot_map)[addr] = annot;
 	} else {
-		annot->text = static_cast<char *>
-			(realloc(annot->text, annot->textlen + textlen + 1));
-		if (annot->text == NULL) {
+		annot_t *annot = (*annot_pos).second;
+		char **annot_text;
+		size_t *annot_textlen;
+
+		if (pre) {
+			annot_text = &annot->pre_text;
+			annot_textlen = &annot->pre_textlen;
+		} else {
+			annot_text = &annot->post_text;
+			annot_textlen = &annot->post_textlen;
+		}
+
+		*annot_text = static_cast<char *>
+			(realloc(*annot_text, *annot_textlen + textlen + 1));
+		if (*annot_text == NULL) {
 			errno = ENOMEM;
 			return -1;
 		}
 
-		memcpy(&annot->text[annot->textlen], text, textlen);
-		annot->textlen += textlen;
-		annot->text[annot->textlen] = '\0';
+		memcpy(&(*annot_text)[*annot_textlen], text, textlen);
+		*annot_textlen += textlen;
+		(*annot_text)[*annot_textlen] = '\0';
 
-		free(text);
+		delete text;
 	}
 
 	return 0;
@@ -149,8 +163,6 @@ image_add_annot_from_file(image_t *image, FILE *f)
 	int reading_addr = 1;
 	int pre = 1;
 
-	hashtable_t *annot_ht = &image->annot_ht;
-
 	uint_t line = 1;
 	while ((read = getline(&text, &textlen, f)) != -1) {
 		if (read == 0 || !strcmp(text, "\n")) {
@@ -164,9 +176,9 @@ image_add_annot_from_file(image_t *image, FILE *f)
 			     (addr == LONG_MAX || addr == LONG_MIN))
 			    || (errno != 0 && addr == 0)
 			    || (endptr == text)) {
-				free(text);
-				fprintf(stderr, "Unable to parse address at"
-					" line %u.\n", line);
+				delete text;
+				cerr << "Unable to parse address at line " 
+				     << dec << line << "." << endl;
 				return -1;
 			}
 
@@ -188,7 +200,7 @@ image_add_annot_from_file(image_t *image, FILE *f)
 		line += 1;
 	}
 
-	if (text) free(text);
+	if (text) delete text;
 
 	return 0;
 }

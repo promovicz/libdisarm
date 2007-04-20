@@ -3,20 +3,16 @@
 #ifndef _SYMBOL_HH
 #define _SYMBOL_HH
 
-#include "hashtable.hh"
+#include <map>
+
 #include "types.hh"
 
-
-typedef struct {
-	hashtable_elm_t elm;
-	arm_addr_t addr;
-	char *name;
-} sym_elm_t;
+using namespace std;
 
 
-int symbol_add(hashtable_t *sym_ht, arm_addr_t addr, const char *name,
-	       int overwrite);
-int symbol_add_from_file(hashtable_t *sym_ht, FILE *f);
+int symbol_add(map<arm_addr_t, char *> *sym_map,
+	       arm_addr_t addr, const char *name, bool overwrite);
+int symbol_add_from_file(map<arm_addr_t, char *> *sym_map, FILE *f);
 
 
 #endif /* ! _SYMBOL_HH */

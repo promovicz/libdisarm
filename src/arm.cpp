@@ -8,7 +8,11 @@
 #include <cstdlib>
 #include <cstdarg>
 
+#include <map>
+
 #include "arm.hh"
+
+using namespace std;
 
 
 static const arm_param_pattern_t branch_xchg_pattern[] = {
@@ -391,23 +395,37 @@ static const arm_instr_pattern_t instr_pattern[] = {
 };
 
 
-static char *
-default_addr_string(arm_addr_t addr, void *data)
+char *
+arm_addr_string(arm_addr_t addr, map<arm_addr_t, char *> *sym_map)
 {
 	char *addrstr = NULL;
 	int r;
 
-	static const char *format = "0x%x";
+	map<arm_addr_t, char *>::iterator sym;
 
-	r = snprintf(NULL, 0, format, addr);
-	if (r > 0) {
-		addrstr = (char *)malloc((r+1)*sizeof(char));
-		if (addrstr == NULL) abort();
-		r = snprintf(addrstr, r+1, format, addr);
+	if (sym_map != NULL && (sym = sym_map->find(addr)) != sym_map->end()) {
+		static const char *format = "<%s>";
+		const char *sym_name = (*sym).second;
+
+		r = snprintf(NULL, 0, format, sym_name);
+		if (r > 0) {
+			addrstr = new char[r+1];
+			if (addrstr == NULL) abort();
+			r = snprintf(addrstr, r+1, format, sym_name);
+		}
+	} else {
+		static const char *format = "0x%x";
+
+		r = snprintf(NULL, 0, format, addr);
+		if (r > 0) {
+			addrstr = new char[r+1];
+			if (addrstr == NULL) abort();
+			r = snprintf(addrstr, r+1, format, addr);
+		}
 	}
 
 	if (r <= 0) {
-		if (addrstr != NULL) free(addrstr);
+		if (addrstr != NULL) delete addrstr;
 		return NULL;
 	}
 
@@ -644,12 +662,9 @@ arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist)
 
 void
 arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
-		 char *(*addr_string)(arm_addr_t addr, void *data),
-		 void *user_data)
+		 map<arm_addr_t, char *> *sym_map)
 {
 	int ret;
-
-	if (addr_string == NULL) addr_string = default_addr_string;
 
 	const arm_instr_pattern_t *ip = arm_instr_get_instr_pattern(instr);
 
@@ -740,19 +755,21 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		if (rn == 15) {
 			if (opcode == ARM_DATA_OPCODE_ADD) {
-				char *immstr = addr_string(addr + 8 + rot_imm,
-							   user_data);
+				char *immstr =
+					arm_addr_string(addr + 8 + rot_imm,
+							sym_map);
 				if (immstr == NULL) abort();
 
 				fprintf(f, "\t; %s", immstr);
-				free(immstr);
+				delete immstr;
 			} else if (opcode == ARM_DATA_OPCODE_SUB) {
-				char *immstr = addr_string(addr + 8 - rot_imm,
-							   user_data);
+				char *immstr =
+					arm_addr_string(addr + 8 - rot_imm,
+							sym_map);
 				if (immstr == NULL) abort();
 
 				fprintf(f, "\t; %s", immstr);
-				free(immstr);
+				delete immstr;
 			}
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_UNDEF_1 ||
@@ -835,12 +852,12 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		if (rn == 15) {
 			int off = imm * (u ? 1 : -1);
-			char *targetstr = addr_string(addr + 8 + off,
-						      user_data);
+			char *targetstr = arm_addr_string(addr + 8 + off,
+							  sym_map);
 			if (targetstr == NULL) abort();
 
 			fprintf(f, "\t; %s", targetstr);
-			free(targetstr);
+			delete targetstr;
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_LS_REG_OFF) {
 		int cond, p, u, b, w, load, rn, rd, sha, sh, rm;
@@ -879,7 +896,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		unsigned int target = arm_instr_branch_target(offset, addr);
 
-		char *targetstr = addr_string(target, user_data);
+		char *targetstr = arm_addr_string(target, sym_map);
 		if (targetstr == NULL) abort();
 
 		fprintf(f, "b%s%s\t%s",
@@ -887,7 +904,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 			(cond != ARM_COND_AL ? cond_map[cond] : ""),
 			targetstr);
 
-		free(targetstr);
+		delete targetstr;
 	} else if (ip->type == ARM_INSTR_TYPE_BKPT) {
 		int imm_hi, imm_lo;
 		ret = arm_instr_get_params(instr, ip, 2, &imm_hi, &imm_lo);
@@ -902,12 +919,12 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		unsigned int target = arm_instr_branch_target(offset, addr);
 
-		char *targetstr = addr_string(target, user_data);
+		char *targetstr = arm_addr_string(target, sym_map);
 		if (targetstr == NULL) abort();
 
 		fprintf(f, "blx\t%s", targetstr);
 
-		free(targetstr);
+		delete targetstr;
 	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_XCHG) {
 		int cond, rm;
 		ret = arm_instr_get_params(instr, ip, 2, &cond, &rm);
@@ -1073,12 +1090,12 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		if (rn == 15) {
 			int off = ((off_hi << 4) | off_lo) * (u ? 1 : -1);
-			char *targetstr = addr_string(addr + 8 + off,
-						      user_data);
+			char *targetstr = arm_addr_string(addr + 8 + off,
+							  sym_map);
 			if (targetstr == NULL) abort();
 
 			fprintf(f, "\t; %s", targetstr);
-			free(targetstr);
+			delete targetstr;
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_LS_TWO_REG_OFF) {
 		int cond, p, u, w, rn, rd, store, rm;
@@ -1116,12 +1133,12 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		if (rn == 15) {
 			int off = ((off_hi << 4) | off_lo) * (u ? 1 : -1);
-			char *targetstr = addr_string(addr + 8 + off,
-						      user_data);
+			char *targetstr = arm_addr_string(addr + 8 + off,
+							  sym_map);
 			if (targetstr == NULL) abort();
 
 			fprintf(f, "\t; %s", targetstr);
-			free(targetstr);
+			delete targetstr;
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_L_SIGNED_REG_OFF) {
 		int cond, p, u, w, rn, rd, h, rm;
@@ -1160,12 +1177,12 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		if (rn == 15) {
 			int off = ((off_hi << 4) | off_lo) * (u ? 1 : -1);
-			char *targetstr = addr_string(addr + 8 + off,
-						      user_data);
+			char *targetstr = arm_addr_string(addr + 8 + off,
+							  sym_map);
 			if (targetstr == NULL) abort();
 
 			fprintf(f, "\t; %s", targetstr);
-			free(targetstr);
+			delete targetstr;
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_DSP_ADD_SUB) {
 		int cond, op, rn, rd, rm;

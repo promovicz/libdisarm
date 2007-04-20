@@ -12,8 +12,7 @@ typedef struct _inter_ctx inter_ctx_t;
 inter_ctx_t *inter_new_ctx();
 void inter_clear_ctx(inter_ctx_t *ctx);
 
-void inter_arm_append(inter_ctx_t *ctx, arm_instr_t instr,
-		      unsigned int address);
+void inter_arm_append(inter_ctx_t *ctx, arm_instr_t instr, arm_addr_t addr);
 
 void inter_fprint(FILE *f, inter_ctx_t *ctx);
 

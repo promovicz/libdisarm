@@ -3,7 +3,12 @@
 #ifndef _ARM_HH
 #define _ARM_HH
 
+#include <list>
+#include <map>
+
 #include "types.hh"
+
+using namespace std;
 
 
 typedef enum {
@@ -170,9 +175,9 @@ arm_addr_t arm_instr_branch_target(int offset, arm_addr_t address);
 int arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg);
 int arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist);
 
-void arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t address,
-		      char *(*addr_string)(arm_addr_t addr, void *data),
-		      void *user_data);
+void arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
+		      map<arm_addr_t, char *> *sym_map);
+char *arm_addr_string(arm_addr_t addr, map<arm_addr_t, char *> *sym_map);
 
 
 #endif /* ! _ARM_HH */

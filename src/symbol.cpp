@@ -7,55 +7,40 @@
 #include <cctype>
 #include <cerrno>
 
+#include <iostream>
+#include <map>
+
 #include "symbol.hh"
 #include "types.hh"
 
+using namespace std;
+
 
 int
-symbol_add(hashtable_t *sym_ht, arm_addr_t addr, const char *name,
-	   int overwrite)
+symbol_add(map<arm_addr_t, char *> *sym_map,
+	   arm_addr_t addr, const char *name, bool overwrite)
 {
-	int r;
-
-	if (!overwrite) {
-		sym_elm_t *sym = (sym_elm_t *)
-			hashtable_lookup(sym_ht, &addr, sizeof(arm_addr_t));
-		if (sym != NULL) return 0;
+	map<arm_addr_t, char *>::iterator sym_old = sym_map->find(addr);
+	if (sym_old != sym_map->end()) {
+		if (!overwrite) {
+			return 0;
+		} else {
+			char *old_name = (*sym_old).second;
+			sym_map->erase(sym_old);
+			delete old_name;
+		}
 	}
 
-	sym_elm_t *sym = static_cast<sym_elm_t *>
-		(malloc(sizeof(sym_elm_t)));
-	if (sym == NULL) {
-		errno = ENOMEM;
-		return -1;
-	}
+	char *dup_name = strdup(name);
+	if (dup_name == NULL) return -1;
 
-	sym->addr = addr;
-	sym->name = strdup(name);
-	if (sym->name == NULL) {
-		int errsv = errno;
-		free(sym);
-		errno = errsv;
-		return -1;
-	}
-
-	hashtable_elm_t *old;
-	r = hashtable_insert(sym_ht, (hashtable_elm_t *)sym,
-			     &sym->addr, sizeof(arm_addr_t), &old);
-	if (r < 0) {
-		int errsv = errno;
-		free(sym->name);
-		free(sym);
-		errno = errsv;
-		return -1;
-	}
-	if (old != NULL) free(old);
+	(*sym_map)[addr] = dup_name;
 
 	return 0;
 }
 
 int
-symbol_add_from_file(hashtable_t *sym_ht, FILE *f)
+symbol_add_from_file(map<arm_addr_t, char *> *sym_map, FILE *f)
 {
 	int r;
 	char *text = NULL;
@@ -75,8 +60,8 @@ symbol_add_from_file(hashtable_t *sym_ht, FILE *f)
 			     (addr == LONG_MAX || addr == LONG_MIN))
 			    || (errno != 0 && addr == 0)
 			    || (endptr == text)) {
-				free(text);
-				fprintf(stderr, "Unable to parse address.\n");
+				delete text;
+				cerr << "Unable to parse address." << endl;
 				return -1;
 			}
 
@@ -87,12 +72,12 @@ symbol_add_from_file(hashtable_t *sym_ht, FILE *f)
 			char *nlptr = strchr(endptr, '\n');
 			if (nlptr != NULL) *nlptr = '\0';
 
-			r = symbol_add(sym_ht, addr, endptr, 1);
+			r = symbol_add(sym_map, addr, endptr, 1);
 			if (r < 0) return -1;
 		}
 	}
 
-	if (text) free(text);
+	if (text) delete text;
 
 	return 0;
 }

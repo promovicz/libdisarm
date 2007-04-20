@@ -13,8 +13,7 @@
 codesim_ctx_t *
 codesim_new(mem_read_func mem_read)
 {
-	codesim_ctx_t *codesim = static_cast<codesim_ctx_t *>
-		(malloc(sizeof(codesim_ctx_t)));
+	codesim_ctx_t *codesim = new codesim_ctx_t;
 	if (codesim == NULL) {
 		errno = ENOMEM;
 		return NULL;
@@ -29,7 +28,7 @@ codesim_new(mem_read_func mem_read)
 void
 codesim_free(codesim_ctx_t *codesim)
 {
-	free(codesim);
+	delete codesim;
 }
 
 void

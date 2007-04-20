@@ -7,42 +7,29 @@
 #include <cctype>
 #include <cerrno>
 
+#include <iostream>
+#include <iomanip>
+#include <list>
+#include <stack>
+
 #include "codesep.hh"
 #include "arm.hh"
-#include "entrypoint.hh"
 #include "image.hh"
-#include "list.hh"
 #include "types.hh"
 
 #define CODESEP_CODE  0xff;
 #define CODESEP_DATA  0x7f;
 
-
-typedef struct {
-	list_elm_t elm;
-	arm_addr_t addr;
-} bb_stack_elm_t;
-
-typedef struct {
-	hashtable_elm_t elm;
-	arm_addr_t addr;
-	list_t *dests;
-} destlist_elm_t;
-
-typedef struct {
-	list_elm_t elm;
-	arm_addr_t addr;
-} dest_elm_t;
+using namespace std;
 
 
 static void
 report_jump_fail(arm_instr_t instr, arm_addr_t addr)
 {
-	FILE *f = stdout;
-
-	fprintf(f, "Unable to handle jump at 0x%x.\n", addr);
-	fprintf(f, " Instruction: ");
-	arm_instr_fprint(f, instr, addr, NULL, NULL);
+	cout << "Unable to handle jump at "
+	     << hex << setw(8) << setfill('0') << addr << endl;
+	cout << " Instruction: ";
+	arm_instr_fprint(stdout, instr, addr, NULL);
 }
 
 static int
@@ -71,7 +58,8 @@ backtrack_reg_change(image_t *image, uint_t reg, arm_addr_t addr,
 }
 
 static int
-separate_basic_block(image_t *image, list_t *stack, hashtable_t *dest_ht,
+separate_basic_block(image_t *image, stack<arm_instr_t> *bb_stack,
+		     map<arm_addr_t, list<arm_addr_t> *> *dest_map,
 		     arm_addr_t addr, uint8_t *code_bitmap)
 {
 	int r;
@@ -81,30 +69,19 @@ separate_basic_block(image_t *image, list_t *stack, hashtable_t *dest_ht,
 		if (code_bitmap[addr >> 2]) break;
 		code_bitmap[addr >> 2] = CODESEP_CODE;
 
-		destlist_elm_t *destlist = (destlist_elm_t *)
-			hashtable_lookup(dest_ht, &addr, sizeof(arm_addr_t));
-		if (destlist != NULL) {
-			while (!list_is_empty(destlist->dests)) {
-				dest_elm_t *dest = (dest_elm_t *)
-					list_remove_head(destlist->dests);
-
-				bb_stack_elm_t *bbs =
-					static_cast<bb_stack_elm_t *>
-					(malloc(sizeof(bb_stack_elm_t)));
-				if (bbs == NULL) abort();
-
-				bbs->addr = dest->addr;
-				list_prepend(stack, (list_elm_t *)bbs);
-
-				free(dest);
+		map<arm_addr_t, list<arm_addr_t> *>::iterator dest_list_pos =
+			dest_map->find(addr);
+		if (dest_list_pos != dest_map->end()) {
+			list<arm_addr_t> *dest_list =
+				(*dest_list_pos).second;
+			while (!dest_list->empty()) {
+				arm_addr_t addr = dest_list->front();
+				dest_list->pop_front();
+				bb_stack->push(addr);
 			}
 
-			r = hashtable_remove(dest_ht,
-					     (hashtable_elm_t *)destlist);
-			if (r < 0) return -1;
-
-			free(destlist->dests);
-			free(destlist);
+			dest_map->erase(dest_list_pos);
+			delete dest_list;
 		}
 
 		arm_instr_t instr;
@@ -115,8 +92,9 @@ separate_basic_block(image_t *image, list_t *stack, hashtable_t *dest_ht,
 		const arm_instr_pattern_t *ip =
 			arm_instr_get_instr_pattern(instr);
 		if (ip == NULL) {
-			fprintf(stderr, "Undefined instruction encountered in"
-				" code/data separation at 0x%x.\n", addr);
+			cerr << "Undefined instruction encountered in"
+			     << " code/data separation at 0x"
+			     << hex << addr << "." << endl;
 			break;
 		}
 
@@ -133,13 +111,7 @@ separate_basic_block(image_t *image, list_t *stack, hashtable_t *dest_ht,
 				addr += sizeof(arm_instr_t);
 
 				/* branch target */
-				bb_stack_elm_t *bbs =
-					static_cast<bb_stack_elm_t *>
-					(malloc(sizeof(bb_stack_elm_t)));
-				if (bbs == NULL) abort();
-
-				bbs->addr = target;
-				list_prepend(stack, (list_elm_t *)bbs);
+				bb_stack->push(target);
 			} else {
 				addr += sizeof(arm_instr_t);
 			}
@@ -162,8 +134,8 @@ separate_basic_block(image_t *image, list_t *stack, hashtable_t *dest_ht,
 								 bb_begin,
 								 &btaddr);
 					if (r < 0) {
-						fprintf(stderr,
-							"Backtrack error.\n");
+						cerr << "Backtrack error."
+						     << endl;
 					} else if (r) {
 						report_jump_fail(instr, addr);
 					}
@@ -214,45 +186,28 @@ separate_basic_block(image_t *image, list_t *stack, hashtable_t *dest_ht,
 }
 
 static int
-jump_dest_add(hashtable_t *dest_ht, arm_addr_t addr, list_t *dests)
+jump_dest_add(map<arm_addr_t, list<arm_addr_t> *> *dest_map,
+	      arm_addr_t addr, list<arm_addr_t> *dests)
 {
 	int r;
 
-	destlist_elm_t *destlist = static_cast<destlist_elm_t *>
-		(malloc(sizeof(destlist_elm_t)));
-	if (destlist == NULL) {
-		errno = ENOMEM;
-		return -1;
+	map<arm_addr_t, list<arm_addr_t> *>::iterator dest_list_pos =
+		dest_map->find(addr);
+	if (dest_list_pos != dest_map->end()) {
+		list<arm_addr_t> *old_dests = (*dest_list_pos).second;
+		dest_map->erase(dest_list_pos);
+		dests->merge(*old_dests);
+		delete old_dests;
 	}
 
-	destlist->addr = addr;
-	destlist->dests = dests;
-
-	destlist_elm_t *old;
-	r = hashtable_insert(dest_ht, (hashtable_elm_t *)destlist,
-			     &destlist->addr, sizeof(arm_addr_t),
-			     (hashtable_elm_t **)&old);
-	if (r < 0) {
-		int errsv = errno;
-		free(destlist);
-		errno = errsv;
-		return -1;
-	}
-	if (old != NULL) {
-		while (!list_is_empty(old->dests)) {
-			dest_elm_t *dest =
-				(dest_elm_t *)list_remove_head(old->dests);
-			list_prepend(destlist->dests, (list_elm_t *)dest);
-		}
-		free(old->dests);
-		free(old);
-	}
+	(*dest_map)[addr] = dests;
 
 	return 0;
 }
 
 static int
-read_jump_dest_from_file(hashtable_t *dest_ht, FILE *f)
+read_jump_dest_from_file(map<arm_addr_t, list<arm_addr_t> *> *dest_map,
+			 FILE *f)
 {
 	int r;
 	char *text = NULL;
@@ -272,18 +227,16 @@ read_jump_dest_from_file(hashtable_t *dest_ht, FILE *f)
 			     (addr == LONG_MAX || addr == LONG_MIN))
 			    || (errno != 0 && addr == 0)
 			    || (endptr == text)) {
-				free(text);
-				fprintf(stderr, "Unable to parse address.\n");
+				delete text;
+				cerr << "Unable to parse address." << endl;
 				return -1;
 			}
 
-			list_t *dests = static_cast<list_t *>
-				(malloc(sizeof(list_t)));
+			list<arm_addr_t> *dests = new list<arm_addr_t>();
 			if (dests == NULL) {
 				errno = ENOMEM;
 				return -1;
 			}
-			list_init(dests);
 
 			while (1) {
 				while (isblank(*endptr)) endptr += 1;
@@ -296,86 +249,62 @@ read_jump_dest_from_file(hashtable_t *dest_ht, FILE *f)
 				     (dest == LONG_MAX || dest == LONG_MIN))
 				    || (errno != 0 && dest == 0)
 				    || (endptr == text)) {
-					free(text);
-					fprintf(stderr,
-						"Unable to parse address.\n");
+					delete text;
+					cerr << "Unable to parse address."
+					     << endl;
 					return -1;
 				}
 
-				dest_elm_t *destelm = static_cast<dest_elm_t *>
-					(malloc(sizeof(dest_elm_t)));
-				if (destelm == NULL) {
-					errno = ENOMEM;
-					return -1;
-				}
-
-				destelm->addr = dest;
-
-				list_append(dests, (list_elm_t *)destelm);
+				dests->push_back(dest);
 			}
 
-			r = jump_dest_add(dest_ht, addr, dests);
+			r = jump_dest_add(dest_map, addr, dests);
 			if (r < 0) {
 				int errsv = errno;
-				free(dests);
+				delete dests;
 				errno = errsv;
 				return -1;
 			}
 		}
 	}
 
-	if (text) free(text);
+	if (text) delete text;
 
 	return 0;
 }
 
 int
-codesep_analysis(list_t *ep_list, image_t *image,
+codesep_analysis(list<arm_addr_t> *ep_list, image_t *image,
 		 uint8_t **code_bitmap, FILE *f)
 {
 	int r;
 
-	hashtable_t dest_ht;
-	r = hashtable_init(&dest_ht, 0);
-	if (r < 0) return -1;
+	map<arm_addr_t, list<arm_addr_t> *> dest_map;
 
 	if (f != NULL) {
-		r = read_jump_dest_from_file(&dest_ht, f);
-		if (r < 0) {
-			hashtable_deinit(&dest_ht);
-			return -1;
-		}
+		r = read_jump_dest_from_file(&dest_map, f);
+		if (r < 0) return -1;
 	}
 
 	*code_bitmap = static_cast<uint8_t *>
 		(calloc(image->size >> 2, sizeof(uint8_t)));
 	if (*code_bitmap == NULL) abort();
 
-	list_t stack;
-	list_init(&stack);
+	stack<arm_addr_t> bb_stack;
 
-	list_elm_t *elm;
-	list_foreach(ep_list, elm) {
-		ep_elm_t *ep = (ep_elm_t *)elm;
-		bb_stack_elm_t *bbs = static_cast<bb_stack_elm_t *>
-			(malloc(sizeof(bb_stack_elm_t)));
-		if (bbs == NULL) abort();
-
-		bbs->addr = ep->addr;
-		list_prepend(&stack, (list_elm_t *)bbs);
+	list<arm_addr_t>::iterator ep_iter;
+	for (ep_iter = ep_list->begin(); ep_iter != ep_list->end();
+	     ep_iter++) {
+		bb_stack.push(*ep_iter);
 	}
 
-	while (!list_is_empty(&stack)) {
-		bb_stack_elm_t *bbs =
-			(bb_stack_elm_t *)list_remove_head(&stack);
-		arm_addr_t addr = bbs->addr;
-		free(bbs);
+	while (!bb_stack.empty()) {
+		arm_addr_t addr = bb_stack.top();
+		bb_stack.pop();
 
-		separate_basic_block(image, &stack, &dest_ht,
+		separate_basic_block(image, &bb_stack, &dest_map,
 				     addr, *code_bitmap);
 	}
-
-	hashtable_deinit(&dest_ht);
 
 	return 0;
 }
