@@ -161,8 +161,8 @@ main(int argc, char *argv[])
 	map<arm_addr_t, bool> bb_map;
 	map<arm_addr_t, list<ref_t *> *> ref_list_map;
 
-	r = basicblock_analysis(&bb_map, &sym_map, &ref_list_map, image,
-				image_codemap);
+	r = basicblock_initial_analysis(&bb_map, &ep_list, &sym_map,
+					&ref_list_map, image);
 	if (r < 0) {
 		cerr << "Unable to finish basic block analysis." << endl;
 		exit(EXIT_FAILURE);

@@ -17,7 +17,7 @@ using namespace std;
 static void
 reference_add(map<arm_addr_t, list<ref_t *> *> *ref_list_map,
 	      map<arm_addr_t, char *> *sym_map,
-	      arm_addr_t source, arm_addr_t target, int cond, int link)
+	      arm_addr_t source, arm_addr_t target, bool cond, bool link)
 {
 	int r;
 
@@ -70,14 +70,20 @@ basicblock_add(map<arm_addr_t, bool> *bb_map, arm_addr_t addr)
 }
 
 int
-basicblock_analysis(map<arm_addr_t, bool> *bb_map,
-		    map<arm_addr_t, char *> *sym_map,
-		    map<arm_addr_t, list<ref_t *> *> *reflist_map,
-		    image_t *image, uint8_t *codemap)
+basicblock_initial_analysis(map<arm_addr_t, bool> *bb_map,
+			    list<arm_addr_t> *entrypoints,
+			    map<arm_addr_t, char *> *sym_map,
+			    map<arm_addr_t, list<ref_t *> *> *reflist_map,
+			    image_t *image)
 {
 	int r;
 
-	basicblock_add(bb_map, 0x0);
+	/* add entrypoints */
+	list<arm_addr_t>::iterator entrypoint_iter;
+	for (entrypoint_iter = entrypoints->begin();
+	     entrypoint_iter != entrypoints->end(); entrypoint_iter++) {
+		basicblock_add(bb_map, (*entrypoint_iter));
+	}
 
 	uint_t i = 0;
 	while (1) {
@@ -85,13 +91,6 @@ basicblock_analysis(map<arm_addr_t, bool> *bb_map,
 		r = image_read_instr(image, i, &instr);
 		if (r == 0) break;
 		else if (r < 0) return -1;
-
-#if 0
-		if (!codemap[i >> 2]) {
-			i += sizeof(arm_instr_t);
-			continue;
-		}
-#endif
 
 		const arm_instr_pattern_t *ip =
 			arm_instr_get_instr_pattern(instr);
@@ -113,7 +112,8 @@ basicblock_analysis(map<arm_addr_t, bool> *bb_map,
 			if (link || cond != ARM_COND_AL) {
 				/* fall-through reference */
 				reference_add(reflist_map, sym_map, i,
-					      i + sizeof(arm_instr_t), 0, 0);
+					      i + sizeof(arm_instr_t),
+					      false, false);
 			}
 
 			/* basic block for branch target */
@@ -135,7 +135,7 @@ basicblock_analysis(map<arm_addr_t, bool> *bb_map,
 					/* fall-through reference */
 					reference_add(reflist_map, sym_map, i,
 						      i + sizeof(arm_instr_t),
-						      1, 0);
+						      true, false);
 				}
 			}
 		} else if (ip->type == ARM_INSTR_TYPE_LS_REG_OFF ||
@@ -150,7 +150,7 @@ basicblock_analysis(map<arm_addr_t, bool> *bb_map,
 					/* fall-through reference */
 					reference_add(reflist_map, sym_map, i,
 						      i + sizeof(arm_instr_t),
-						      1, 0);
+						      true, false);
 				}
 			}
 		} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
@@ -165,7 +165,7 @@ basicblock_analysis(map<arm_addr_t, bool> *bb_map,
 					/* fall-through reference */
 					reference_add(reflist_map, sym_map, i,
 						      i + sizeof(arm_instr_t),
-						      1, 0);
+						      true, false);
 				}
 			}
 		}
