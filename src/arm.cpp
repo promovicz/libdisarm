@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdarg>
+#include <cassert>
 
 #include <map>
 
@@ -436,7 +437,7 @@ const arm_instr_pattern_t *
 arm_instr_get_instr_pattern(arm_instr_t instr)
 {
 	int i;
-	for (i = 0; instr_pattern[i].mask != 0; i++) {
+	for (i = 0; instr_pattern[i].type != ARM_INSTR_TYPE_NONE; i++) {
 		if ((instr & instr_pattern[i].mask) ==
 		    instr_pattern[i].value) {
 			return &instr_pattern[i];
@@ -462,6 +463,7 @@ uint_t
 arm_instr_get_param(arm_instr_t instr,
 		    const arm_instr_pattern_t *ip, uint_t param)
 {
+	assert(ip->param != NULL);
 	const arm_param_pattern_t *pp = &ip->param[param];
 	return (instr & pp->mask) >> pp->shift;
 }
@@ -486,6 +488,40 @@ arm_instr_get_params(arm_instr_t instr, const arm_instr_pattern_t *ip,
 	}
 
 	va_end(ap);
+	return 0;
+}
+
+int
+arm_instr_get_cond(arm_instr_t instr, arm_cond_t *cond)
+{
+	const arm_instr_pattern_t *ip =
+		arm_instr_get_instr_pattern(instr);
+	if (ip == NULL) return -1;
+
+	switch (ip->type) {
+	ARM_INSTR_TYPE_BRANCH_LINK_THUMB:
+		*cond = ARM_COND_AL;
+		break;
+	default:
+		if (ip->param != NULL) {
+			*cond = static_cast<arm_cond_t>
+				(arm_instr_get_param(instr, ip, 0));
+		} else return -1;
+		break;
+	}
+
+	return 0;
+}
+
+static int
+arm_instr_get_type(arm_instr_t instr, arm_instr_type_t *type)
+{
+	const arm_instr_pattern_t *ip =
+		arm_instr_get_instr_pattern(instr);
+	if (ip == NULL) return -1;
+
+	*type = ip->type;
+
 	return 0;
 }
 
@@ -650,7 +686,16 @@ arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist)
 		/* TODO */
 	} else if (ip->type == ARM_INSTR_TYPE_L_SIGNED_REG_OFF ||
 		   ip->type == ARM_INSTR_TYPE_L_SIGNED_IMM_OFF) {
-		/* TODO */
+		int cond, p, u, w, rn, rd;
+		ret = arm_instr_get_params(instr, ip, 6, &cond, &p, &u, &w,
+					   &rn, &rd);
+		if (ret < 0) abort();
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist |= (1 << rd);
+			if (!p || (p && w)) *reglist |= (1 << rn);
+		}
 	} else if (ip->type == ARM_INSTR_TYPE_DSP_ADD_SUB) {
 		/* TODO */
 	} else if (ip->type == ARM_INSTR_TYPE_DSP_MUL) {
