@@ -57,6 +57,40 @@ backtrack_reg_change(image_t *image, uint_t reg, arm_addr_t addr,
 	return 0;
 }
 
+static arm_addr_t
+separate_bb_data_imm_shift(image_t *image,
+			   arm_instr_t instr, const arm_instr_pattern_t *ip,
+			   stack<arm_instr_t> *bb_stack,
+			   arm_addr_t addr, arm_addr_t bb_begin)
+{
+	int r;
+	int cond, opcode, s, rn, rd, sha, sh, rm;
+	r = arm_instr_get_params(instr, ip, 8, &cond,
+				 &opcode, &s, &rn, &rd, &sha,
+				 &sh, &rm);
+	if (r < 0) abort();
+
+	if ((opcode < ARM_DATA_OPCODE_TST || opcode > ARM_DATA_OPCODE_CMN) &&
+	    rd == 15 && cond != ARM_COND_NV) {
+		if (opcode == ARM_DATA_OPCODE_MOV &&
+		    sh == ARM_DATA_SHIFT_LSL && sha == 0 && rm == 14) {
+			arm_addr_t btaddr;
+			r = backtrack_reg_change(image, 14, addr, bb_begin,
+						 &btaddr);
+			if (r < 0) cerr << "Backtrack error." << endl;
+			else if (r) report_jump_fail(instr, addr);
+
+			if (cond != ARM_COND_AL) addr += sizeof(arm_instr_t);
+		} else {
+			report_jump_fail(instr, addr);
+		}
+	} else {
+		addr += sizeof(arm_instr_t);
+	}
+
+	return addr;
+}
+
 static int
 separate_basic_block(image_t *image, stack<arm_instr_t> *bb_stack,
 		     map<arm_addr_t, list<arm_addr_t> *> *dest_map,
@@ -82,6 +116,7 @@ separate_basic_block(image_t *image, stack<arm_instr_t> *bb_stack,
 
 			dest_map->erase(dest_list_pos);
 			delete dest_list;
+			break;
 		}
 
 		arm_instr_t instr;
@@ -116,39 +151,9 @@ separate_basic_block(image_t *image, stack<arm_instr_t> *bb_stack,
 				addr += sizeof(arm_instr_t);
 			}
 		} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT) {
-			int cond, opcode, s, rn, rd, sha, sh, rm;
-			r = arm_instr_get_params(instr, ip, 8, &cond,
-						 &opcode, &s, &rn, &rd, &sha,
-						 &sh, &rm);
-			if (r < 0) abort();
-
-			if ((opcode < ARM_DATA_OPCODE_TST ||
-			     opcode > ARM_DATA_OPCODE_CMN) && rd == 15 &&
-			    cond != ARM_COND_NV) {
-				if (opcode == ARM_DATA_OPCODE_MOV &&
-				    sh == ARM_DATA_SHIFT_LSL && sha == 0 &&
-				    rm == 14) {
-					arm_addr_t btaddr;
-					r = backtrack_reg_change(image,
-								 14, addr,
-								 bb_begin,
-								 &btaddr);
-					if (r < 0) {
-						cerr << "Backtrack error."
-						     << endl;
-					} else if (r) {
-						report_jump_fail(instr, addr);
-					}
-					if (cond == ARM_COND_AL) break;
-					else addr += sizeof(arm_instr_t);
-				} else {
-					report_jump_fail(instr, addr);
-					break;
-				}
-			} else {
-				addr += sizeof(arm_instr_t);
-			}
-
+			addr = separate_bb_data_imm_shift(image, instr, ip,
+							  bb_stack, addr,
+							  bb_begin);
 		} else if (ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
 			   ip->type == ARM_INSTR_TYPE_DATA_IMM) {
 			int cond = arm_instr_get_param(instr, ip, 0);
@@ -177,6 +182,8 @@ separate_basic_block(image_t *image, stack<arm_instr_t> *bb_stack,
 			r = arm_instr_is_reg_changed(instr, 15);
 			if (r < 0) return -1;
 			else if (r) {
+				cout << "Type not explicitly handled: "
+				     << ip->type << endl;
 				report_jump_fail(instr, addr);
 				break;
 			}
