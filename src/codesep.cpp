@@ -24,12 +24,12 @@ using namespace std;
 
 
 static void
-report_jump_fail(arm_instr_t instr, arm_addr_t addr)
+report_jump_fail(arm_instr_t instr, arm_addr_t addr, image_t *image)
 {
 	cout << "Unable to handle jump at "
 	     << hex << setw(8) << setfill('0') << addr << endl;
 	cout << " Instruction: ";
-	arm_instr_fprint(stdout, instr, addr, NULL);
+	arm_instr_fprint(stdout, instr, addr, NULL, image);
 }
 
 static int
@@ -40,7 +40,7 @@ backtrack_reg_change(image_t *image, uint_t reg, arm_addr_t addr,
 
 	while (addr >= limit) {
 		arm_instr_t instr;
-		r = image_read_instr(image, addr, &instr);
+		r = image_read_word(image, addr, &instr);
 		if (r == 0) break;
 		else if (r < 0) return -1;
 
@@ -78,11 +78,11 @@ separate_bb_data_imm_shift(image_t *image,
 			r = backtrack_reg_change(image, 14, addr, bb_begin,
 						 &btaddr);
 			if (r < 0) cerr << "Backtrack error." << endl;
-			else if (r) report_jump_fail(instr, addr);
+			else if (r) report_jump_fail(instr, addr, image);
 
 			if (cond != ARM_COND_AL) addr += sizeof(arm_instr_t);
 		} else {
-			report_jump_fail(instr, addr);
+			report_jump_fail(instr, addr, image);
 		}
 	} else {
 		addr += sizeof(arm_instr_t);
@@ -120,7 +120,7 @@ separate_basic_block(image_t *image, stack<arm_instr_t> *bb_stack,
 		}
 
 		arm_instr_t instr;
-		r = image_read_instr(image, addr, &instr);
+		r = image_read_word(image, addr, &instr);
 		if (r == 0) break;
 		else if (r < 0) return -1;
 
@@ -163,7 +163,7 @@ separate_basic_block(image_t *image, stack<arm_instr_t> *bb_stack,
 			if ((opcode < ARM_DATA_OPCODE_TST ||
 			     opcode > ARM_DATA_OPCODE_CMN) && rd == 15 &&
 			    cond != ARM_COND_NV) {
-				report_jump_fail(instr, addr);
+				report_jump_fail(instr, addr, image);
 				if (cond == ARM_COND_AL) break;
 			}
 			addr += sizeof(arm_instr_t);
@@ -174,7 +174,7 @@ separate_basic_block(image_t *image, stack<arm_instr_t> *bb_stack,
 
 			if (load && (reglist & (1 << 15)) &&
 			    cond != ARM_COND_NV) {
-				report_jump_fail(instr, addr);
+				report_jump_fail(instr, addr, image);
 				if (cond == ARM_COND_AL) break;
 			}
 			addr += sizeof(arm_instr_t);
@@ -184,7 +184,7 @@ separate_basic_block(image_t *image, stack<arm_instr_t> *bb_stack,
 			else if (r) {
 				cout << "Type not explicitly handled: "
 				     << ip->type << endl;
-				report_jump_fail(instr, addr);
+				report_jump_fail(instr, addr, image);
 				break;
 			}
 			addr += sizeof(arm_instr_t);
@@ -293,8 +293,9 @@ codesep_analysis(list<arm_addr_t> *ep_list, image_t *image,
 		if (r < 0) return -1;
 	}
 
+	/* Warning: Hardcoded image size (TODO)*/
 	*code_bitmap = static_cast<uint8_t *>
-		(calloc(image->size >> 2, sizeof(uint8_t)));
+		(calloc(0x200000, sizeof(uint8_t)));
 	if (*code_bitmap == NULL) abort();
 
 	stack<arm_addr_t> bb_stack;
