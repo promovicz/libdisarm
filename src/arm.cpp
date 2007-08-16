@@ -12,6 +12,7 @@
 #include <map>
 
 #include "arm.hh"
+#include "image.hh"
 
 using namespace std;
 
@@ -535,6 +536,17 @@ arm_instr_branch_target(int offset, arm_addr_t addr)
 }
 
 int
+arm_instr_is_reg_used(arm_instr_t instr, uint_t reg)
+{
+	int r;
+	uint_t reglist;
+	r = arm_instr_used_regs(instr, &reglist);
+	if (r < 0) return -1;
+
+	return (reglist & (1 << reg));
+}
+
+int
 arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg)
 {
 	int r;
@@ -543,6 +555,20 @@ arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg)
 	if (r < 0) return -1;
 
 	return (reglist & (1 << reg));
+}
+
+int
+arm_instr_used_regs(arm_instr_t instr, uint_t *reglist)
+{
+	int ret;
+
+	const arm_instr_pattern_t *ip =
+		arm_instr_get_instr_pattern(instr);
+	if (ip == NULL) return -1;
+
+	*reglist = 0xffff;
+
+	return 0;
 }
 
 int
@@ -707,7 +733,7 @@ arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist)
 
 void
 arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
-		 map<arm_addr_t, char *> *sym_map)
+		 map<arm_addr_t, char *> *sym_map, image_t *image)
 {
 	int ret;
 
@@ -900,9 +926,25 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 			char *targetstr = arm_addr_string(addr + 8 + off,
 							  sym_map);
 			if (targetstr == NULL) abort();
-
+			
 			fprintf(f, "\t; %s", targetstr);
 			delete targetstr;
+
+			if (load && b) {
+				uint8_t value;
+				int r = image_read_byte(image, addr + 8 + off,
+							&value);
+				if (r >= 0) {
+					fprintf(f, ": 0x%02x", value);
+				}
+			} else if (load && !b) {
+				uint32_t value;
+				int r = image_read_word(image, addr + 8 + off,
+							&value);
+				if (r >= 0) {
+					fprintf(f, ": 0x%08x", value);
+				}
+			}
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_LS_REG_OFF) {
 		int cond, p, u, b, w, load, rn, rd, sha, sh, rm;
@@ -1141,6 +1183,15 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 			fprintf(f, "\t; %s", targetstr);
 			delete targetstr;
+
+			if (load) {
+				uint16_t value;
+				int r = image_read_hword(image, addr + 8 + off,
+							 &value);
+				if (r >= 0) {
+					fprintf(f, ": 0x%04x", value);
+				}
+			}
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_LS_TWO_REG_OFF) {
 		int cond, p, u, w, rn, rd, store, rm;

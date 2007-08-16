@@ -7,6 +7,7 @@
 #include <map>
 
 #include "types.hh"
+#include "image.hh"
 
 using namespace std;
 
@@ -173,11 +174,13 @@ int arm_instr_get_params(arm_instr_t instr, const arm_instr_pattern_t *ip,
 			 uint_t params, ...);
 int arm_instr_get_cond(arm_instr_t instr, arm_cond_t *cond);
 arm_addr_t arm_instr_branch_target(int offset, arm_addr_t address);
+int arm_instr_is_reg_used(arm_instr_t instr, uint_t reg);
 int arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg);
+int arm_instr_used_regs(arm_instr_t instr, uint_t *reglist);
 int arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist);
 
 void arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
-		      map<arm_addr_t, char *> *sym_map);
+		      map<arm_addr_t, char *> *sym_map, image_t *image);
 char *arm_addr_string(arm_addr_t addr, map<arm_addr_t, char *> *sym_map);
 
 
