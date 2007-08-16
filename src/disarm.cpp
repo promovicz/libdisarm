@@ -177,6 +177,47 @@ main(int argc, char *argv[])
 		/* basic block */
 		if (basicblock_is_addr_entry(&bb_map, i)) {
 			cout << endl << BLOCK_SEPARATOR << endl;
+
+			uint_t bb_size;
+			basicblock_find(&bb_map, i, NULL, &bb_size);
+
+			/* reg use/change analysis */
+			uint_t bb_use_list = 0;
+			uint_t bb_change_list = 0;
+
+			arm_addr_t addr = i + bb_size;
+			while (addr > i) {
+				addr -= sizeof(arm_addr_t);
+
+				arm_instr_t bb_instr;
+				r = image_read_word(image, addr, &bb_instr);
+				if (r == 0) break;
+				if (r < 0) {
+					perror("image_read_word");
+					break;
+				}
+
+				uint_t change_regs;
+				r = arm_instr_changed_regs(bb_instr,
+							   &change_regs);
+				if (r < 0) break;
+
+				bb_change_list |= change_regs;
+
+				uint_t use_regs;
+				r = arm_instr_used_regs(bb_instr, &use_regs);
+				if (r < 0) break;
+
+				bb_use_list &= (~change_regs & 0xffff);
+				bb_use_list |= use_regs;
+			}
+
+			cout << "; changed reg(s): {";
+			arm_reglist_fprint(stdout, bb_change_list);
+			cout << " }" << endl;
+			cout << "; reg(s) depended on: {";
+			arm_reglist_fprint(stdout, bb_use_list);
+			cout << " }" << endl;
 		}
 
 		/* code references */

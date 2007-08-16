@@ -568,6 +568,160 @@ arm_instr_used_regs(arm_instr_t instr, uint_t *reglist)
 
 	*reglist = 0xffff;
 
+	if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int opcode = arm_instr_get_param(instr, ip, 1);
+		int rn = arm_instr_get_param(instr, ip, 3);
+		int rm = arm_instr_get_param(instr, ip, 7);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rm);
+			if (opcode != ARM_DATA_OPCODE_MOV &&
+			    opcode != ARM_DATA_OPCODE_MVN) {
+				*reglist |= (1 << rn);
+			}
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int opcode = arm_instr_get_param(instr, ip, 1);
+		int rn = arm_instr_get_param(instr, ip, 3);
+		int rs = arm_instr_get_param(instr, ip, 5);
+		int rm = arm_instr_get_param(instr, ip, 7);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rs) | (1 << rm);
+			if (opcode != ARM_DATA_OPCODE_MOV &&
+			    opcode != ARM_DATA_OPCODE_MVN) {
+				*reglist |= (1 << rn);
+			}
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int opcode = arm_instr_get_param(instr, ip, 1);
+		int rn = arm_instr_get_param(instr, ip, 3);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			if (opcode != ARM_DATA_OPCODE_MOV &&
+			    opcode != ARM_DATA_OPCODE_MVN) {
+				*reglist = (1 << rn);
+			}
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_SWI) {
+		*reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_CLZ) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int rm = arm_instr_get_param(instr, ip, 2);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rm);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_MOVE_IMM_STATUS) {
+		*reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_MOVE_REG_STATUS) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int rm = arm_instr_get_param(instr, ip, 3);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rm);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_MOVE_STATUS_REG) {
+		*reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int load = arm_instr_get_param(instr, ip, 5);
+		int rn = arm_instr_get_param(instr, ip, 6);
+		int rd = arm_instr_get_param(instr, ip, 7);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rn);
+			if (!load) *reglist |= (1 << rd);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_LS_REG_OFF) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int load = arm_instr_get_param(instr, ip, 5);
+		int rn = arm_instr_get_param(instr, ip, 6);
+		int rd = arm_instr_get_param(instr, ip, 7);
+		int rm = arm_instr_get_param(instr, ip, 10);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rn) | (1 << rm);
+			if (!load) *reglist |= (1 << rd);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK) {
+		*reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_BKPT) {
+		*reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK_THUMB) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_XCHG) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK_XCHG) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_CP_DATA) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_CP_LS) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_CP_REG) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int load = arm_instr_get_param(instr, ip, 5);
+		int rn = arm_instr_get_param(instr, ip, 6);
+		int rlist = arm_instr_get_param(instr, ip, 7);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rn);
+			if (!load) *reglist |= rlist;
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_MUL) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_MUL_LONG) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_SWAP) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_LS_HWORD_REG_OFF) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int load = arm_instr_get_param(instr, ip, 4);
+		int rn = arm_instr_get_param(instr, ip, 5);
+		int rd = arm_instr_get_param(instr, ip, 6);
+		int rm = arm_instr_get_param(instr, ip, 7);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rn) | (1 << rm);
+			if (!load) *reglist |= (1 << rd);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_LS_HWORD_IMM_OFF) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int load = arm_instr_get_param(instr, ip, 4);
+		int rn = arm_instr_get_param(instr, ip, 5);
+		int rd = arm_instr_get_param(instr, ip, 6);
+
+		*reglist = 0;
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << rn);
+			if (!load) *reglist |= (1 << rd);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_LS_TWO_REG_OFF ||
+		   ip->type == ARM_INSTR_TYPE_LS_TWO_IMM_OFF) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_L_SIGNED_REG_OFF ||
+		   ip->type == ARM_INSTR_TYPE_L_SIGNED_IMM_OFF) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_DSP_ADD_SUB) {
+		/* TODO */
+	} else if (ip->type == ARM_INSTR_TYPE_DSP_MUL) {
+		/* TODO */
+	}
+
 	return 0;
 }
 
@@ -729,6 +883,38 @@ arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist)
 	}
 
 	return 0;
+}
+
+void
+arm_reglist_fprint(FILE *f, uint_t reglist)
+{
+	int comma = 0;
+	int range_start = -1;
+	for (int i = 0; reglist; i++) {
+		if (reglist & 1 && range_start == -1) {
+			range_start = i;
+		}
+
+		reglist >>= 1;
+
+		if (!(reglist & 1)) {
+			if (range_start == i) {
+				if (comma) fprintf(f, ",");
+				fprintf(f, " r%d", i);
+				comma = 1;
+			} else if (i > 0 && range_start == i-1) {
+				if (comma) fprintf(f, ",");
+				fprintf(f, " r%d, r%d",
+					range_start, i);
+				comma = 1;
+			} else if (range_start >= 0) {
+				if (comma) fprintf(f, ",");
+				fprintf(f, " r%d-r%d", range_start, i);
+				comma = 1;
+			}
+			range_start = -1;
+		}
+	}
 }
 
 void
@@ -1083,33 +1269,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 			(u ? "i" : "d"), (p ? "b" : "a"),
 			rn, (w ? "!" : ""));
 
-		int comma = 0;
-		int range_start = -1;
-		for (int i = 0; reglist; i++) {
-			if (reglist & 1 && range_start == -1) {
-				range_start = i;
-			}
-
-			reglist >>= 1;
-
-			if (!(reglist & 1)) {
-				if (range_start == i) {
-					if (comma) fprintf(f, ",");
-					fprintf(f, " r%d", i);
-					comma = 1;
-				} else if (i > 0 && range_start == i-1) {
-					if (comma) fprintf(f, ",");
-					fprintf(f, " r%d, r%d",
-						range_start, i);
-					comma = 1;
-				} else if (range_start >= 0) {
-					if (comma) fprintf(f, ",");
-					fprintf(f, " r%d-r%d", range_start, i);
-					comma = 1;
-				}
-				range_start = -1;
-			}
-		}
+		arm_reglist_fprint(f, reglist);
 
 		fprintf(f, " }%s", (s ? "^" : ""));
 	} else if (ip->type == ARM_INSTR_TYPE_MUL) {

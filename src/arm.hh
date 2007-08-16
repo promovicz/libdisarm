@@ -179,6 +179,7 @@ int arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg);
 int arm_instr_used_regs(arm_instr_t instr, uint_t *reglist);
 int arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist);
 
+void arm_reglist_fprint(FILE *f, uint_t reglist);
 void arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		      map<arm_addr_t, char *> *sym_map, image_t *image);
 char *arm_addr_string(arm_addr_t addr, map<arm_addr_t, char *> *sym_map);
