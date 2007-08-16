@@ -25,8 +25,8 @@ typedef struct {
 } ref_data_t;
 
 
-int basicblock_find(map<arm_addr_t, bool> *bb_map, arm_addr_t addr,
-		    arm_addr_t *bb_addr, uint_t *size);
+void basicblock_find(map<arm_addr_t, bool> *bb_map, arm_addr_t addr,
+		     arm_addr_t *bb_addr, uint_t *size);
 bool basicblock_is_addr_entry(map<arm_addr_t, bool> *bb_map, arm_addr_t addr);
 int bb_instr_analysis(map<arm_addr_t, bool> *bb_map,
 		      list<arm_addr_t> *entrypoints,

@@ -85,7 +85,7 @@ reference_data_add(map<arm_addr_t, list<ref_data_t *> *> *datarefs_map,
 	reference_add<ref_data_t>(datarefs_map, target, ref);
 }
 
-int
+void
 basicblock_find(map<arm_addr_t, bool> *bb_map, arm_addr_t addr,
 		arm_addr_t *bb_addr, uint_t *size)
 {
@@ -96,8 +96,6 @@ basicblock_find(map<arm_addr_t, bool> *bb_map, arm_addr_t addr,
 
 	if (bb_addr != NULL) *bb_addr = iter->first;
 	if (size != NULL) *size = bb_end - iter->first;
-
-	return 0;
 }
 
 bool
