@@ -15,7 +15,7 @@
 #include "arm.hh"
 #include "basicblock.hh"
 #include "codesep.hh"
-#include "endian.h"
+#include "endian.hh"
 #include "image.hh"
 #include "symbol.hh"
 #include "types.hh"
@@ -23,32 +23,9 @@
 using namespace std;
 
 
-typedef struct {
-	image_t *image;
-	arm_addr_t addr;
-	uint_t size;
-} image_mapping_t;
-
-
 #define BLOCK_SEPARATOR  \
   "; --------------------------------------------------------------------"
 
-
-static image_t *
-image_for_addr(list<image_mapping_t *> *img_map, uint_t *addr)
-{
-	list<image_mapping_t *>::iterator iter;
-	for (iter = img_map->begin(); iter != img_map->end(); iter++) {
-		image_mapping_t *imap_elm = *iter;
-		if (*addr >= imap_elm->addr &&
-		    *addr < imap_elm->addr + imap_elm->size) {
-			*addr -= imap_elm->addr;
-			return imap_elm->image;
-		}
-	}
-
-	return NULL;
-}
 
 static int
 entry_point_add(list<arm_addr_t> *ep_list, arm_addr_t addr)
@@ -58,7 +35,6 @@ entry_point_add(list<arm_addr_t> *ep_list, arm_addr_t addr)
 	return 0;
 }
 
-
 int
 main(int argc, char *argv[])
 {
@@ -66,12 +42,36 @@ main(int argc, char *argv[])
 
 	if (argc < 2) return EXIT_FAILURE;
 
-	/* load file */
-	image_t *image = image_new(&argv[1][1], (argv[1][0] == 'B' ? 1 : 0));
+	/* create memory image */
+	image_t *image = image_new();
 	if (image == NULL) {
-		cerr << "Unable to open file: `"
-		     << &argv[1][1] << "'." << endl;
 		perror("image_new");
+		exit(EXIT_FAILURE);
+	}
+
+	/* create file mapping */
+	r = image_create_mapping(image, 0, 0x200000, argv[1], 500,
+				 true, false, true);
+	if (r < 0) {
+		cerr << "Unable to create file mapping: `" << argv[1] << "'."
+		     << endl;
+		perror("image_create_mapping");
+		exit(EXIT_FAILURE);
+	}
+
+	/* create mapping */
+	r = image_create_mapping(image, 0x22000000, 0x40000, NULL, 0,
+				 true, true, true);
+	if (r < 0) {
+		perror("image_create_mapping");
+		exit(EXIT_FAILURE);
+	}
+
+	/* create mapping */
+	r = image_create_mapping(image, 0x24000000, 0x200000, argv[1], 500,
+				 true, false, true);
+	if (r < 0) {
+		perror("image_create_mapping");
 		exit(EXIT_FAILURE);
 	}
 
@@ -91,14 +91,6 @@ main(int argc, char *argv[])
 
 		fclose(annot_file);
 	}
-
-	/* create address space mapping */
-	list<image_mapping_t *> img_map;
-	image_mapping_t *imap_elm = new image_mapping_t;
-	imap_elm->image = image;
-	imap_elm->addr = 0;
-	imap_elm->size = image->size;
-	img_map.push_back(imap_elm);
 
 	/* add arm entry points */
 	list<arm_addr_t> ep_list;
@@ -160,6 +152,7 @@ main(int argc, char *argv[])
 
 	if (jump_file) fclose(jump_file);
 
+	/*
 	FILE *codemap_out = fopen("code_bitmap", "wb");
 	if (codemap_out == NULL) return -1;
 	size_t write = fwrite(image_codemap, sizeof(uint8_t),
@@ -168,12 +161,13 @@ main(int argc, char *argv[])
 		cerr << "Unable to write codemap." << endl;
 	}
 	fclose(codemap_out);
+	*/
 
 	/* print instructions */
 	uint_t i = 0;
 	while (1) {
 		arm_instr_t instr;
-		r = image_read_instr(image, i, &instr);
+		r = image_read_word(image, i, &instr);
 		if (r == 0) break;
 		else if (r < 0) return -1;
 
@@ -181,10 +175,8 @@ main(int argc, char *argv[])
 		uint_t datarefs_printed = 0;
 
 		/* basic block */
-		map<arm_addr_t, bool>::iterator bb_pos = bb_map.find(i);
-		if (bb_pos != bb_map.end() && i > 0) {
+		if (basicblock_is_addr_entry(&bb_map, i)) {
 			cout << endl << BLOCK_SEPARATOR << endl;
-			bb_map.erase(bb_pos);
 		}
 
 		/* code references */
@@ -296,7 +288,7 @@ main(int argc, char *argv[])
 		/* instruction */
 		cout << hex << setw(8) << setfill('0') << i << "\t"
 		     << hex << setw(8) << setfill('0') << instr << "\t";
-		arm_instr_fprint(stdout, instr, i, &sym_map);
+		arm_instr_fprint(stdout, instr, i, &sym_map, image);
 
 		/* post annotation */
 		if (annot != NULL && annot->post_text != NULL) {
@@ -323,7 +315,6 @@ main(int argc, char *argv[])
 
 	/* clean up */
 	image_free(image);
-	delete imap_elm;
 
 	/* clean up symbols */
 	uint_t syms_cleaned = 0;
