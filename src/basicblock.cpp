@@ -85,6 +85,28 @@ reference_data_add(map<arm_addr_t, list<ref_data_t *> *> *datarefs_map,
 	reference_add<ref_data_t>(datarefs_map, target, ref);
 }
 
+int
+basicblock_find(map<arm_addr_t, bool> *bb_map, arm_addr_t addr,
+		arm_addr_t *bb_addr, uint_t *size)
+{
+	map<arm_addr_t, bool>::iterator iter = bb_map->upper_bound(addr);
+	arm_addr_t bb_end = iter->first;
+
+	iter--;
+
+	if (bb_addr != NULL) *bb_addr = iter->first;
+	if (size != NULL) *size = bb_end - iter->first;
+
+	return 0;
+}
+
+bool
+basicblock_is_addr_entry(map<arm_addr_t, bool> *bb_map, arm_addr_t addr)
+{
+	map<arm_addr_t, bool>::iterator iter = bb_map->find(addr);
+	return (iter != bb_map->end());
+}
+
 static void
 basicblock_add(map<arm_addr_t, bool> *bb_map, arm_addr_t addr)
 {
@@ -111,7 +133,7 @@ bb_instr_analysis(map<arm_addr_t, bool> *bb_map,
 	uint_t i = 0;
 	while (1) {
 		arm_instr_t instr;
-		r = image_read_instr(image, i, &instr);
+		r = image_read_word(image, i, &instr);
 		if (r == 0) break;
 		else if (r < 0) return -1;
 
