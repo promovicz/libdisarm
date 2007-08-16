@@ -12,6 +12,7 @@
 #include <sys/mman.h>
 
 #include <iostream>
+#include <list>
 #include <map>
 
 #include "image.hh"
@@ -20,77 +21,231 @@
 
 using namespace std;
 
-
 image_t *
-image_new(const char *filename, bool big_endian)
+image_new()
 {
-	int r;
-
 	image_t *image = new image_t;
 	if (image == NULL) {
 		errno = ENOMEM;
 		return NULL;
 	}
 
-	image->file = fopen(filename, "rb");
-	if (image->file == NULL) {
-		int errsave = errno;
+	image->mapping_list = new list<image_mapping_t *>();
+	if (image->mapping_list == NULL) {
 		delete image;
-		errno = errsave;
 		return NULL;
 	}
-
-	struct stat s;
-	r = fstat(fileno(image->file), &s);
-	if (r < 0) {
-		int errsave = errno;
-		fclose(image->file);
-		delete image;
-		errno = errsave;
-		return NULL;
-	}
-	image->size = s.st_size;
-
-	image->data = mmap(NULL, image->size, PROT_READ, MAP_PRIVATE,
-			   fileno(image->file), 0);
-	if (image->data == MAP_FAILED) {
-		int errsv = errno;
-		fclose(image->file);
-		delete image;
-		errno = errsv;
-		return NULL;
-	}
-
-	image->big_endian = big_endian;
 
 	image->annot_map = new map<arm_addr_t, annot_t *>();
+	if (image->annot_map == NULL) {
+		delete image->mapping_list;
+		delete image;
+		return NULL;
+	}
 
 	return image;
+}
+
+static void
+image_free_mapping(image_mapping_t *mapping)
+{
+	if (mapping->data != NULL) munmap(mapping->data, mapping->mmap_size);
+	if (mapping->file != NULL) fclose(mapping->file);
+	delete mapping;
 }
 
 void
 image_free(image_t *image)
 {
+	while (!image->mapping_list->empty()) {
+		image_mapping_t *mapping = image->mapping_list->front();
+		image->mapping_list->pop_front();
+		image_free_mapping(mapping);
+	}
+
+	delete image->mapping_list;
 	delete image->annot_map;
-	munmap(image->data, image->size);
-	fclose(image->file);
-	delete image;
 }
 
 int
-image_read_instr(image_t *image, uint_t addr, arm_instr_t *instr)
+image_create_mapping(image_t *image, arm_addr_t addr, uint_t size,
+		     const char *filename, uint_t offset, bool read,
+		     bool write, bool big_endian)
 {
-	if (addr > image->size) {
-		errno = EINVAL;
+	int r;
+
+	image_mapping_t *mapping = new image_mapping_t;
+	if (mapping == NULL) {
+		errno = ENOMEM;
+		return -1;
+	}
+
+	mapping->addr = addr;
+
+	if (filename != NULL) {
+		mapping->file = fopen(filename, "rb");
+		if (mapping->file == NULL) {
+			int errsv = errno;
+			delete mapping;
+			errno = errsv;
+			return -1;
+		}
+
+		struct stat s;
+		r = fstat(fileno(mapping->file), &s);
+		if (r < 0) {
+			int errsv = errno;
+			fclose(mapping->file);
+			delete mapping;
+			errno = errsv;
+			return -1;
+		}
+		mapping->size = max(static_cast<uint_t>(0),
+				    min(size, static_cast<uint_t>
+					(s.st_size - offset)));
+
+		uint_t page_size = getpagesize();
+		uint_t mmap_offset =
+			static_cast<uint_t>(offset / page_size) * page_size;
+
+		mapping->mmap_size = mapping->size + offset - mmap_offset;
+		mapping->data = mmap(NULL, mapping->mmap_size, PROT_READ,
+				     MAP_PRIVATE, fileno(mapping->file),
+				     mmap_offset);
+		if (mapping->data == MAP_FAILED) {
+			int errsv = errno;
+			fclose(mapping->file);
+			delete mapping;
+			errno = errsv;
+			return -1;
+		}
+		mapping->data_offset = offset - mmap_offset;
+	} else {
+		mapping->file = NULL;
+		mapping->size = size;
+		mapping->data = NULL;
+		mapping->data_offset = 0;
+		mapping->mmap_size = 0;
+	}
+
+	mapping->read = read;
+	mapping->write = write;
+	mapping->big_endian = big_endian;
+
+	list<image_mapping_t *>::iterator mapping_iter;
+	for (mapping_iter = image->mapping_list->begin();
+	     mapping_iter != image->mapping_list->end(); mapping_iter++) {
+		if ((*mapping_iter)->addr > mapping->addr) break;
+	}
+	image->mapping_list->insert(mapping_iter, mapping);
+
+	return 0;
+}
+
+void
+image_remove_mapping(image_t *image, arm_addr_t addr)
+{
+	list<image_mapping_t *>::iterator mapping_iter;
+	for (mapping_iter = image->mapping_list->begin();
+	     mapping_iter != image->mapping_list->end(); mapping_iter++) {
+		if ((*mapping_iter)->addr == addr) break;
+	}
+	image->mapping_list->erase(mapping_iter);
+
+	image_mapping_t *mapping = *mapping_iter;
+	image_free_mapping(mapping);
+}
+
+static image_mapping_t *
+image_find_mapping(image_t *image, arm_addr_t addr)
+{
+	image_mapping_t *mapping = NULL;
+
+	list<image_mapping_t *>::iterator mapping_iter;
+	for (mapping_iter = image->mapping_list->begin();
+	     mapping_iter != image->mapping_list->end(); mapping_iter++) {
+		image_mapping_t *m = *mapping_iter;
+		if (addr >= m->addr && addr < (m->addr + m->size)) {
+			mapping = m;
+			break;
+		}
+	}
+
+	return mapping;
+}
+
+/* no endianness correction is done */
+int
+image_read(image_t *image, arm_addr_t addr, void *dest, uint_t size)
+{
+	image_mapping_t *src_mapping = image_find_mapping(image, addr);
+	if (src_mapping == NULL) return 0;
+
+	if ((addr + size) > (src_mapping->addr + src_mapping->size)) {
 		return 0;
 	}
 
-	arm_instr_t *insdata = (arm_instr_t *)image->data;
+	uint8_t *bytesrc = static_cast<uint8_t *>(src_mapping->data);
+	void *src = &bytesrc[src_mapping->data_offset + addr -
+			     src_mapping->addr];
+	memcpy(dest, src, size);
 
-	if (image->big_endian) *instr = be32toh(insdata[addr >> 2]);
-	else *instr = le32toh(insdata[addr >> 2]);
+	return size;
+}
 
-	return 1;
+int
+image_read_byte(image_t *image, arm_addr_t addr, uint8_t *dest)
+{
+	image_mapping_t *src_mapping = image_find_mapping(image, addr);
+	if (src_mapping == NULL) return 0;
+
+	if ((addr + sizeof(uint8_t)) >
+	    (src_mapping->addr + src_mapping->size)) return 0;
+
+	uint8_t *bytesrc = static_cast<uint8_t *>(src_mapping->data);
+	*dest = *static_cast<uint8_t *>
+		(&bytesrc[src_mapping->data_offset + addr -
+			  src_mapping->addr]);
+
+	return sizeof(uint8_t);
+}
+
+int
+image_read_hword(image_t *image, arm_addr_t addr, uint16_t *dest)
+{
+	image_mapping_t *src_mapping = image_find_mapping(image, addr);
+	if (src_mapping == NULL) return 0;
+
+	if ((addr + sizeof(uint16_t)) >
+	    (src_mapping->addr + src_mapping->size)) return 0;
+
+	uint8_t *bytesrc = static_cast<uint8_t *>(src_mapping->data);
+	*dest = *reinterpret_cast<uint16_t *>
+		(&bytesrc[src_mapping->data_offset + addr -
+			  src_mapping->addr]);
+	if (src_mapping->big_endian) *dest = be16toh(*dest);
+	else *dest = le16toh(*dest);
+
+	return sizeof(uint16_t);
+}
+
+int
+image_read_word(image_t *image, arm_addr_t addr, uint32_t *dest)
+{
+	image_mapping_t *src_mapping = image_find_mapping(image, addr);
+	if (src_mapping == NULL) return 0;
+
+	if ((addr + sizeof(uint32_t)) >
+	    (src_mapping->addr + src_mapping->size)) return 0;
+
+	uint8_t *bytesrc = static_cast<uint8_t *>(src_mapping->data);
+	*dest = *reinterpret_cast<uint32_t *>
+		(&bytesrc[src_mapping->data_offset + addr -
+			  src_mapping->addr]);
+	if (src_mapping->big_endian) *dest = be32toh(*dest);
+	else *dest = le32toh(*dest);
+
+	return sizeof(uint32_t);
 }
 
 int

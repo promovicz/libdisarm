@@ -5,7 +5,6 @@
 
 #include <map>
 
-#include "image.hh"
 #include "types.hh"
 
 using namespace std;
@@ -19,17 +18,34 @@ typedef struct {
 } annot_t;
 
 typedef struct {
-	FILE *file;
+	arm_addr_t addr;
 	uint_t size;
+	FILE *file;
 	void *data;
+	uint_t data_offset;
+	uint_t mmap_size;
+	bool read;
+	bool write;
 	bool big_endian;
+} image_mapping_t;
+
+typedef struct {
+	list<image_mapping_t *> *mapping_list;
 	map<arm_addr_t, annot_t *> *annot_map;
 } image_t;
 
 
-image_t *image_new(const char *filename, bool big_endian);
+image_t *image_new();
 void image_free(image_t *image);
-int image_read_instr(image_t *image, arm_addr_t addr, arm_instr_t *instr);
+int image_create_mapping(image_t *image, arm_addr_t addr, uint_t size,
+			 const char *filename, uint_t offset, bool read,
+			 bool write, bool big_endian);
+void image_remove_mapping(image_t *image, arm_addr_t addr);
+int image_read(image_t *image, arm_addr_t addr, void *dest, uint_t size);
+int image_read_byte(image_t *image, arm_addr_t addr, uint8_t *dest);
+int image_read_hword(image_t *image, arm_addr_t addr, uint16_t *dest);
+int image_read_word(image_t *image, arm_addr_t addr, uint32_t *dest);
+
 int image_add_annot(image_t *image, arm_addr_t addr,
 		    char *text, size_t textlen, bool pre);
 int image_add_annot_from_file(image_t *image, FILE *f);
