@@ -26,6 +26,30 @@ using namespace std;
 #define BLOCK_SEPARATOR  \
   "; --------------------------------------------------------------------"
 
+static char
+get_print_char(uint8_t data)
+{
+	if (data >= 32 && data <= 126) return data;
+	else return '.';
+}
+
+static void
+print_data(uint32_t data)
+{
+	cout << hex << setw(2) << setfill('0')
+	     << ((data & 0xff000000) >> 24) << " "
+	     << hex << setw(2) << setfill('0')
+	     << ((data & 0xff0000) >> 16) << " "
+	     << hex << setw(2) << setfill('0')
+	     << ((data & 0xff00) >> 8) << " "
+	     << hex << setw(2) << setfill('0')
+	     << (data & 0xff) << "\t|"
+	     << get_print_char((data & 0xff000000) >> 24)
+	     << get_print_char((data & 0xff0000) >> 16)
+	     << get_print_char((data & 0xff00) >> 8)
+	     << get_print_char(data & 0xff)
+	     << "|" << endl;
+}
 
 static int
 entry_point_add(list<arm_addr_t> *ep_list, arm_addr_t addr)
@@ -163,6 +187,8 @@ main(int argc, char *argv[])
 	fclose(codemap_out);
 	*/
 
+	bool bb_code = true;
+
 	/* print instructions */
 	uint_t i = 0;
 	while (1) {
@@ -179,45 +205,104 @@ main(int argc, char *argv[])
 			cout << endl << BLOCK_SEPARATOR << endl;
 
 			uint_t bb_size;
-			basicblock_find(&bb_map, i, NULL, &bb_size);
+			basicblock_find(&bb_map, i, NULL, &bb_size, &bb_code);
 
-			/* reg use/change analysis */
-			uint_t bb_use_list = 0;
-			uint_t bb_change_list = 0;
+			if (bb_code) {
+				/* reg use/change analysis */
+				uint_t bb_use_regs = 0;
+				uint_t bb_change_regs = 0;
+				uint_t bb_use_flags = 0;
+				uint_t bb_change_flags = 0;
 
-			arm_addr_t addr = i + bb_size;
-			while (addr > i) {
-				addr -= sizeof(arm_addr_t);
+				arm_addr_t addr = i + bb_size;
+				while (addr > i) {
+					addr -= sizeof(arm_addr_t);
 
-				arm_instr_t bb_instr;
-				r = image_read_word(image, addr, &bb_instr);
-				if (r == 0) break;
-				if (r < 0) {
-					perror("image_read_word");
-					break;
+					arm_instr_t bb_instr;
+					r = image_read_word(image, addr,
+							    &bb_instr);
+					if (r == 0) break;
+					if (r < 0) {
+						perror("image_read_word");
+						break;
+					}
+
+					/* regs */
+					uint_t change_regs;
+					r = arm_instr_changed_regs(
+						bb_instr, &change_regs);
+					if (r < 0) break;
+
+					bb_change_regs |= change_regs;
+
+					uint_t use_regs;
+					r = arm_instr_used_regs(bb_instr,
+								&use_regs);
+					if (r < 0) break;
+
+					bb_use_regs &= (~change_regs &
+							ARM_REG_MASK);
+					bb_use_regs |= use_regs;
+
+					/* flags */
+					uint_t change_flags;
+					r = arm_instr_changed_flags(
+						bb_instr, &change_flags);
+					if (r < 0) break;
+
+					bb_change_flags |= change_flags;
+
+					uint_t use_flags;
+					r = arm_instr_used_flags(bb_instr,
+								 &use_flags);
+					if (r < 0) break;
+
+					bb_use_flags &=
+						(~change_flags &
+						 ARM_FLAG_MASK);
+					bb_use_flags |= use_flags;
 				}
 
-				uint_t change_regs;
-				r = arm_instr_changed_regs(bb_instr,
-							   &change_regs);
-				if (r < 0) break;
+				bool change_printed = false;
+				if (bb_change_regs != 0) {
+					cout << "; changed reg(s): {";
+					arm_reglist_fprint(stdout,
+							   bb_change_regs);
+					cout << " }";
+					change_printed = true;
+				}
+				if (bb_change_flags != 0) {
+					if (change_printed) cout << ", ";
+					else cout << "; ";
+					cout << "changed flag(s): {";
+					arm_flaglist_fprint(stdout,
+							    bb_change_flags);
+					cout << " }";
+					change_printed = true;
+				}
+				if (change_printed) cout << endl;
 
-				bb_change_list |= change_regs;
-
-				uint_t use_regs;
-				r = arm_instr_used_regs(bb_instr, &use_regs);
-				if (r < 0) break;
-
-				bb_use_list &= (~change_regs & 0xffff);
-				bb_use_list |= use_regs;
+				bool use_printed = false;
+				if (bb_use_regs != 0) {
+					cout << "; reg(s) depended on: {";
+					arm_reglist_fprint(stdout,
+							   bb_use_regs);
+					cout << " }";
+					use_printed = true;
+				}
+				if (bb_use_flags != 0) {
+					if (use_printed) cout << ", ";
+					else cout << "; ";
+					cout << "flag(s) depended on: {";
+					arm_flaglist_fprint(stdout,
+							    bb_use_flags);
+					cout << " }";
+					use_printed = true;
+				}
+				if (use_printed) cout << endl;
+			} else {
+				cout << "; data block" << endl;
 			}
-
-			cout << "; changed reg(s): {";
-			arm_reglist_fprint(stdout, bb_change_list);
-			cout << " }" << endl;
-			cout << "; reg(s) depended on: {";
-			arm_reglist_fprint(stdout, bb_use_list);
-			cout << " }" << endl;
 		}
 
 		/* code references */
@@ -327,9 +412,14 @@ main(int argc, char *argv[])
 		}
 
 		/* instruction */
-		cout << hex << setw(8) << setfill('0') << i << "\t"
-		     << hex << setw(8) << setfill('0') << instr << "\t";
-		arm_instr_fprint(stdout, instr, i, &sym_map, image);
+		cout << hex << setw(8) << setfill('0') << i << "\t";
+		if (bb_code) {
+			cout << hex << setw(8) << setfill('0') << instr
+			     << "\t";
+			arm_instr_fprint(stdout, instr, i, &sym_map, image);
+		} else {
+			print_data(instr);
+		}
 
 		/* post annotation */
 		if (annot != NULL && annot->post_text != NULL) {

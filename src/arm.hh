@@ -165,6 +165,43 @@ static const char *data_opcode_map[] = {
 };
 
 
+typedef enum {
+	ARM_REG_R0 = 0, ARM_REG_R1,
+	ARM_REG_R2,     ARM_REG_R3,
+	ARM_REG_R4,     ARM_REG_R5,
+	ARM_REG_R6,     ARM_REG_R7,
+	ARM_REG_R8,     ARM_REG_R9,
+	ARM_REG_R10,    ARM_REG_R11,
+	ARM_REG_R12,    ARM_REG_R13,
+	ARM_REG_R14,    ARM_REG_R15,
+	ARM_REG_MAX
+} arm_reg_t;
+
+#define ARM_REG_SP  ARM_REG_13
+#define ARM_REG_LR  ARM_REG_14
+#define ARM_REG_PC  ARM_REG_15
+
+static const char *arm_reg_map[] = {
+	"r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
+	"r8", "r9", "r10", "r11", "r12", "sp", "lr", "pc"
+};
+
+#define ARM_REG_MASK  ((1 << ARM_REG_MAX) - 1)
+
+
+typedef enum {
+	ARM_FLAG_N = 0, ARM_FLAG_Z,
+	ARM_FLAG_C,     ARM_FLAG_V,
+	ARM_FLAG_MAX
+} arm_flag_t;
+
+static const char *arm_flag_map[] = {
+	"N", "Z", "C", "V"
+};
+
+#define ARM_FLAG_MASK  ((1 << ARM_FLAG_MAX) - 1)
+
+
 const arm_instr_pattern_t *arm_instr_get_instr_pattern(arm_instr_t instr);
 const arm_param_pattern_t *arm_instr_get_param_pattern(
 	const arm_instr_pattern_t *ip, uint_t param);
@@ -173,13 +210,17 @@ uint_t arm_instr_get_param(arm_instr_t instr,
 int arm_instr_get_params(arm_instr_t instr, const arm_instr_pattern_t *ip,
 			 uint_t params, ...);
 int arm_instr_get_cond(arm_instr_t instr, arm_cond_t *cond);
+int arm_instr_is_unpredictable(arm_instr_t instr, bool *unpredictable);
 arm_addr_t arm_instr_branch_target(int offset, arm_addr_t address);
 int arm_instr_is_reg_used(arm_instr_t instr, uint_t reg);
 int arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg);
 int arm_instr_used_regs(arm_instr_t instr, uint_t *reglist);
 int arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist);
+int arm_instr_used_flags(arm_instr_t instr, uint_t *flags);
+int arm_instr_changed_flags(arm_instr_t instr, uint_t *flags);
 
 void arm_reglist_fprint(FILE *f, uint_t reglist);
+void arm_flaglist_fprint(FILE *f, uint_t flaglist);
 void arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		      map<arm_addr_t, char *> *sym_map, image_t *image);
 char *arm_addr_string(arm_addr_t addr, map<arm_addr_t, char *> *sym_map);

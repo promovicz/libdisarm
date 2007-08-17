@@ -87,7 +87,7 @@ reference_data_add(map<arm_addr_t, list<ref_data_t *> *> *datarefs_map,
 
 void
 basicblock_find(map<arm_addr_t, bool> *bb_map, arm_addr_t addr,
-		arm_addr_t *bb_addr, uint_t *size)
+		arm_addr_t *bb_addr, uint_t *size, bool *code)
 {
 	map<arm_addr_t, bool>::iterator iter = bb_map->upper_bound(addr);
 	arm_addr_t bb_end = iter->first;
@@ -96,6 +96,7 @@ basicblock_find(map<arm_addr_t, bool> *bb_map, arm_addr_t addr,
 
 	if (bb_addr != NULL) *bb_addr = iter->first;
 	if (size != NULL) *size = bb_end - iter->first;
+	if (code != NULL) *code = iter->second;
 }
 
 bool
@@ -128,6 +129,7 @@ bb_instr_analysis(map<arm_addr_t, bool> *bb_map,
 		basicblock_add(bb_map, (*entrypoint_iter));
 	}
 
+	/* basic block analysis */
 	uint_t i = 0;
 	while (1) {
 		arm_instr_t instr;
@@ -200,6 +202,30 @@ bb_instr_analysis(map<arm_addr_t, bool> *bb_map,
 							   target);
 				}
 			}
+		}
+
+		i += sizeof(arm_instr_t);
+	}
+
+	/* code/data analysis */
+	i = 0;
+	while (1) {
+		arm_instr_t instr;
+		r = image_read_word(image, i, &instr);
+		if (r == 0) break;
+		else if (r < 0) return -1;
+
+		bool unpredictable;
+		r = arm_instr_is_unpredictable(instr, &unpredictable);
+		if (r < 0) return -1;
+
+		if (unpredictable) {
+			arm_addr_t bb_addr;
+			uint_t bb_size;
+
+			basicblock_find(bb_map, i, &bb_addr, &bb_size, NULL);
+
+			(*bb_map)[bb_addr] = false;
 		}
 
 		i += sizeof(arm_instr_t);

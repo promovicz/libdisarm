@@ -526,6 +526,40 @@ arm_instr_get_type(arm_instr_t instr, arm_instr_type_t *type)
 	return 0;
 }
 
+int
+arm_instr_is_unpredictable(arm_instr_t instr, bool *unpredictable)
+{
+	const arm_instr_pattern_t *ip =
+		arm_instr_get_instr_pattern(instr);
+	if (ip == NULL) {
+		*unpredictable = true;
+		return 0;
+	}
+
+	*unpredictable = false;
+
+	if (ip->type == ARM_INSTR_TYPE_CLZ) {
+		int rd = arm_instr_get_param(instr, ip, 1);
+		int rm = arm_instr_get_param(instr, ip, 2);
+
+		if (rd == 15 || rm == 15) *unpredictable = true;
+	} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
+		int rn = arm_instr_get_param(instr, ip, 6);
+		int reglist = arm_instr_get_param(instr, ip, 7);
+
+		if (rn == 15 || reglist == 0) *unpredictable = true;
+	} else if (ip->type == ARM_INSTR_TYPE_UNDEF_1 ||
+		   ip->type == ARM_INSTR_TYPE_UNDEF_2 ||
+		   ip->type == ARM_INSTR_TYPE_UNDEF_3 ||
+		   ip->type == ARM_INSTR_TYPE_UNDEF_4 ||
+		   ip->type == ARM_INSTR_TYPE_UNDEF_5) {
+		*unpredictable = true;
+	}
+
+	return 0;
+
+}
+
 arm_addr_t
 arm_instr_branch_target(int offset, arm_addr_t addr)
 {
@@ -560,13 +594,11 @@ arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg)
 int
 arm_instr_used_regs(arm_instr_t instr, uint_t *reglist)
 {
-	int ret;
-
 	const arm_instr_pattern_t *ip =
 		arm_instr_get_instr_pattern(instr);
 	if (ip == NULL) return -1;
 
-	*reglist = 0xffff;
+	*reglist = ARM_REG_MASK;
 
 	if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT) {
 		int cond = arm_instr_get_param(instr, ip, 0);
@@ -734,7 +766,7 @@ arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist)
 		arm_instr_get_instr_pattern(instr);
 	if (ip == NULL) return -1;
 
-	*reglist = 0xffff;
+	*reglist = ARM_REG_MASK;
 
 	if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
 	    ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
@@ -783,6 +815,8 @@ arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist)
 		if (cond != ARM_COND_NV) {
 			*reglist |= (1 << 15);
 			if (link) *reglist |= (1 << 14);
+			/* standard calling conventions assumed */
+			*reglist |= (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_BKPT) {
 		*reglist = 0;
@@ -885,6 +919,165 @@ arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist)
 	return 0;
 }
 
+int
+arm_instr_used_flags(arm_instr_t instr, uint_t *flags)
+{
+	int r;
+
+	const arm_instr_pattern_t *ip =
+		arm_instr_get_instr_pattern(instr);
+	if (ip == NULL) return -1;
+
+	arm_cond_t cond;
+	r = arm_instr_get_cond(instr, &cond);
+	if (r < 0) return -1;
+
+	*flags = 0;
+
+	switch (cond) {
+	case ARM_COND_EQ:
+	case ARM_COND_NE:
+		*flags |= (1 << ARM_FLAG_Z);
+		break;
+	case ARM_COND_CS:
+	case ARM_COND_CC:
+		*flags |= (1 << ARM_FLAG_C);
+		break;
+	case ARM_COND_MI:
+	case ARM_COND_PL:
+		*flags |= (1 << ARM_FLAG_N);
+		break;
+	case ARM_COND_VS:
+	case ARM_COND_VC:
+		*flags |= (1 << ARM_FLAG_V);
+		break;
+	case ARM_COND_HI:
+	case ARM_COND_LS:
+		*flags |= (1 << ARM_FLAG_C) | (1 << ARM_FLAG_Z);
+		break;
+	case ARM_COND_GE:
+	case ARM_COND_LT:
+		*flags |= (1 << ARM_FLAG_N) | (1 << ARM_FLAG_V);
+		break;
+	case ARM_COND_GT:
+	case ARM_COND_LE:
+		*flags |= (1 << ARM_FLAG_Z);
+		*flags |= (1 << ARM_FLAG_N) | (1 << ARM_FLAG_V);
+		break;
+	case ARM_COND_AL:
+	case ARM_COND_NV:
+	default:
+		break;
+	}
+
+	if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
+	    ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
+	    ip->type == ARM_INSTR_TYPE_DATA_IMM) {
+		int opcode = arm_instr_get_param(instr, ip, 1);
+
+		if (opcode == ARM_DATA_OPCODE_ADC ||
+		    opcode == ARM_DATA_OPCODE_SBC ||
+		    opcode == ARM_DATA_OPCODE_RSC) {
+			*flags |= (1 << ARM_FLAG_C);
+		}
+	}
+
+	return 0;
+}
+
+int
+arm_instr_changed_flags(arm_instr_t instr, uint_t *flags)
+{
+	const arm_instr_pattern_t *ip =
+		arm_instr_get_instr_pattern(instr);
+	if (ip == NULL) return -1;
+
+	*flags = ARM_FLAG_MASK;
+
+	if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT ||
+	    ip->type == ARM_INSTR_TYPE_DATA_REG_SHIFT ||
+	    ip->type == ARM_INSTR_TYPE_DATA_IMM) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int opcode = arm_instr_get_param(instr, ip, 1);
+		int s = arm_instr_get_param(instr, ip, 2);
+
+		*flags = 0;
+		if ((cond != ARM_COND_NV) && s) {
+			*flags = (1 << ARM_FLAG_N) | (1 << ARM_FLAG_Z) |
+				(1 << ARM_FLAG_C);
+
+			switch (opcode) {
+			case ARM_DATA_OPCODE_ADD:
+			case ARM_DATA_OPCODE_ADC:
+			case ARM_DATA_OPCODE_CMP:
+			case ARM_DATA_OPCODE_CMN:
+			case ARM_DATA_OPCODE_RSB:
+			case ARM_DATA_OPCODE_RSC:
+			case ARM_DATA_OPCODE_SBC:
+			case ARM_DATA_OPCODE_SUB:
+				*flags |= (1 << ARM_FLAG_V);
+				break;
+			}
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_MOVE_IMM_STATUS ||
+		   ip->type == ARM_INSTR_TYPE_MOVE_REG_STATUS) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+
+		*flags = 0;
+		if (cond != ARM_COND_NV) *flags = ARM_FLAG_MASK;
+	} else if (ip->type == ARM_INSTR_TYPE_CP_REG) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int load = arm_instr_get_param(instr, ip, 2);
+		int rd = arm_instr_get_param(instr, ip, 4);
+
+		*flags = 0;
+		if (cond != ARM_COND_NV && load && rd == 15) {
+			*flags = ARM_FLAG_MASK;
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_MUL) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int s = arm_instr_get_param(instr, ip, 2);
+
+		*flags = 0;
+		if (cond != ARM_COND_NV && s) {
+			*flags = (1 << ARM_FLAG_N) | (1 << ARM_FLAG_Z);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_MUL_LONG) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		int s = arm_instr_get_param(instr, ip, 3);
+
+		*flags = 0;
+		if (cond != ARM_COND_NV && s) {
+			*flags = (1 << ARM_FLAG_N) | (1 << ARM_FLAG_Z);
+		}
+	} else if (ip->type == ARM_INSTR_TYPE_SWI ||
+		   ip->type == ARM_INSTR_TYPE_CLZ ||
+		   ip->type == ARM_INSTR_TYPE_MOVE_STATUS_REG ||
+		   ip->type == ARM_INSTR_TYPE_LS_IMM_OFF ||
+		   ip->type == ARM_INSTR_TYPE_LS_REG_OFF ||
+		   ip->type == ARM_INSTR_TYPE_BRANCH_LINK ||
+		   ip->type == ARM_INSTR_TYPE_BKPT ||
+		   ip->type == ARM_INSTR_TYPE_BRANCH_LINK_THUMB ||
+		   ip->type == ARM_INSTR_TYPE_BRANCH_XCHG ||
+		   ip->type == ARM_INSTR_TYPE_BRANCH_LINK_XCHG ||
+		   ip->type == ARM_INSTR_TYPE_CP_DATA ||
+		   ip->type == ARM_INSTR_TYPE_CP_LS ||
+		   ip->type == ARM_INSTR_TYPE_LS_MULTI ||
+		   ip->type == ARM_INSTR_TYPE_SWAP ||
+		   ip->type == ARM_INSTR_TYPE_LS_HWORD_REG_OFF ||
+		   ip->type == ARM_INSTR_TYPE_LS_HWORD_IMM_OFF ||
+		   ip->type == ARM_INSTR_TYPE_LS_TWO_REG_OFF ||
+		   ip->type == ARM_INSTR_TYPE_LS_TWO_IMM_OFF ||
+		   ip->type == ARM_INSTR_TYPE_L_SIGNED_REG_OFF ||
+		   ip->type == ARM_INSTR_TYPE_L_SIGNED_IMM_OFF ||
+		   ip->type == ARM_INSTR_TYPE_DSP_ADD_SUB ||
+		   ip->type == ARM_INSTR_TYPE_DSP_MUL) {
+		*flags = 0;
+	}
+
+	return 0;
+}
+
 void
 arm_reglist_fprint(FILE *f, uint_t reglist)
 {
@@ -914,6 +1107,21 @@ arm_reglist_fprint(FILE *f, uint_t reglist)
 			}
 			range_start = -1;
 		}
+	}
+}
+
+void
+arm_flaglist_fprint(FILE *f, uint_t flaglist)
+{
+	int comma = 0;
+	for (int i = 0; flaglist; i++) {
+		if (flaglist & 1) {
+			if (comma) fprintf(f, ",");
+			fprintf(f, " %s", arm_flag_map[i]);
+			comma = 1;
+		}
+
+		flaglist >>= 1;
 	}
 }
 
@@ -1263,7 +1471,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		ret = arm_instr_get_params(instr, ip, 8, &cond, &p, &u, &s, &w,
 					   &load, &rn, &reglist);
 		if (ret < 0) abort();
-		
+
 		fprintf(f, "%sm%s%s%s\tr%d%s, {", (load ? "ld" : "st"),
 			(cond != ARM_COND_AL ? cond_map[cond] : ""),
 			(u ? "i" : "d"), (p ? "b" : "a"),
