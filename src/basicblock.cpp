@@ -86,39 +86,50 @@ reference_data_add(map<arm_addr_t, list<ref_data_t *> *> *datarefs_map,
 }
 
 void
-basicblock_find(map<arm_addr_t, bool> *bb_map, arm_addr_t addr,
-		arm_addr_t *bb_addr, uint_t *size, bool *code)
+basicblock_find(map<arm_addr_t, basic_block_t *> *bb_map, arm_addr_t addr,
+		arm_addr_t *bb_addr, basic_block_t **bb)
 {
-	map<arm_addr_t, bool>::iterator iter = bb_map->upper_bound(addr);
+	map<arm_addr_t, basic_block_t *>::iterator iter =
+		bb_map->upper_bound(addr);
 	arm_addr_t bb_end = iter->first;
 
 	iter--;
 
 	if (bb_addr != NULL) *bb_addr = iter->first;
-	if (size != NULL) *size = bb_end - iter->first;
-	if (code != NULL) *code = iter->second;
+	if (bb != NULL) {
+		*bb = iter->second;
+		if ((*bb)->size == 0) (*bb)->size = bb_end - iter->first;
+	}
 }
 
 bool
-basicblock_is_addr_entry(map<arm_addr_t, bool> *bb_map, arm_addr_t addr)
+basicblock_is_addr_entry(map<arm_addr_t, basic_block_t *> *bb_map,
+			 arm_addr_t addr)
 {
-	map<arm_addr_t, bool>::iterator iter = bb_map->find(addr);
+	map<arm_addr_t, basic_block_t *>::iterator iter = bb_map->find(addr);
 	return (iter != bb_map->end());
 }
 
 static void
-basicblock_add(map<arm_addr_t, bool> *bb_map, arm_addr_t addr)
+basicblock_add(map<arm_addr_t, basic_block_t *> *bb_map, arm_addr_t addr)
 {
-	(*bb_map)[addr] = true;
+	basic_block_t *bb = new basic_block_t;
+	if (bb == NULL) abort();
+
+	bb->addr = addr;
+	bb->code = true;
+	bb->size = 0;
+
+	(*bb_map)[addr] = bb;
 }
 
 int
-bb_instr_analysis(map<arm_addr_t, bool> *bb_map,
-		  list<arm_addr_t> *entrypoints,
-		  map<arm_addr_t, char *> *sym_map,
-		  map<arm_addr_t, list<ref_code_t *> *> *coderefs_map,
-		  map<arm_addr_t, list<ref_data_t *> *> *datarefs_map,
-		  image_t *image)
+basicblock_analysis(map<arm_addr_t, basic_block_t *> *bb_map,
+		    list<arm_addr_t> *entrypoints,
+		    map<arm_addr_t, char *> *sym_map,
+		    map<arm_addr_t, list<ref_code_t *> *> *coderefs_map,
+		    map<arm_addr_t, list<ref_data_t *> *> *datarefs_map,
+		    image_t *image)
 {
 	int r;
 
@@ -145,62 +156,20 @@ bb_instr_analysis(map<arm_addr_t, bool> *bb_map,
 		}
 
 		if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK) {
-			int cond = arm_instr_get_param(instr, ip, 0);
-			int link = arm_instr_get_param(instr, ip, 1);
 			int offset = arm_instr_get_param(instr, ip, 2);
 			int target = arm_instr_branch_target(offset, i);
-
 
 			/* basic block for fall-through */
 			basicblock_add(bb_map, i + sizeof(arm_instr_t));
 
-			if (link || cond != ARM_COND_AL) {
-				/* fall-through reference */
-				reference_code_add(coderefs_map, sym_map, i,
-						   i + sizeof(arm_instr_t),
-						   (cond != ARM_COND_AL),
-						   false);
-			}
-
 			/* basic block for branch target */
 			basicblock_add(bb_map, target);
-
-			/* target reference */
-			reference_code_add(coderefs_map, sym_map, i, target,
-					   (cond != ARM_COND_AL), link);
 		} else {	
-			arm_cond_t cond;
-			r = arm_instr_get_cond(instr, &cond);
-			if (r < 0) cond = ARM_COND_AL;
-
 			r = arm_instr_is_reg_changed(instr, 15);
 			if (r < 0) return -1;
 			else if (r) {
 				basicblock_add(bb_map,
 					       i + sizeof(arm_instr_t));
-
-
-				if (cond != ARM_COND_AL) {
-					/* fall-through reference */
-					reference_code_add(coderefs_map,
-							   sym_map, i,
-							   i +
-							   sizeof(arm_instr_t),
-							   true, false);
-				}
-			}
-
-			if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
-				int u = arm_instr_get_param(instr, ip, 2);
-				int rn = arm_instr_get_param(instr, ip, 6);
-				int imm = arm_instr_get_param(instr, ip, 8);
-
-				if (rn == 15 && cond != ARM_COND_NV) {
-					arm_addr_t target = i + 8 +
-						(imm * (u ? 1 : -1));
-					reference_data_add(datarefs_map, i,
-							   target);
-				}
 			}
 		}
 
@@ -221,11 +190,87 @@ bb_instr_analysis(map<arm_addr_t, bool> *bb_map,
 
 		if (unpredictable) {
 			arm_addr_t bb_addr;
-			uint_t bb_size;
+			basic_block_t *bb;
 
-			basicblock_find(bb_map, i, &bb_addr, &bb_size, NULL);
+			basicblock_find(bb_map, i, &bb_addr, &bb);
 
-			(*bb_map)[bb_addr] = false;
+			bb->code = false;
+		}
+
+		i += sizeof(arm_instr_t);
+	}
+
+	/* reference collection */
+	basic_block_t *bb = NULL;
+	i = 0;
+	while (1) {
+		arm_instr_t instr;
+		r = image_read_word(image, i, &instr);
+		if (r == 0) break;
+		else if (r < 0) return -1;
+
+		/* basic block */
+		if (basicblock_is_addr_entry(bb_map, i)) {
+			basicblock_find(bb_map, i, NULL, &bb);
+		}
+
+		if (!bb->code) {
+			i += bb->size;
+			continue;
+		}
+
+
+		const arm_instr_pattern_t *ip =
+			arm_instr_get_instr_pattern(instr);
+		if (ip == NULL) {
+			i += sizeof(arm_instr_t);
+			continue;
+		}
+
+		if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK) {
+			int cond = arm_instr_get_param(instr, ip, 0);
+			int link = arm_instr_get_param(instr, ip, 1);
+			int offset = arm_instr_get_param(instr, ip, 2);
+			int target = arm_instr_branch_target(offset, i);
+
+			if (link || cond != ARM_COND_AL) {
+				/* fall-through reference */
+				reference_code_add(coderefs_map, sym_map, i,
+						   i + sizeof(arm_instr_t),
+						   (cond != ARM_COND_AL),
+						   false);
+			}
+
+			/* target reference */
+			reference_code_add(coderefs_map, sym_map, i, target,
+					   (cond != ARM_COND_AL), link);
+		} else {	
+			arm_cond_t cond;
+			r = arm_instr_get_cond(instr, &cond);
+			if (r < 0) cond = ARM_COND_AL;
+
+			r = arm_instr_is_reg_changed(instr, 15);
+			if (r < 0) return -1;
+			else if (r && cond != ARM_COND_AL) {
+				/* fall-through reference */
+				reference_code_add(coderefs_map,
+						   sym_map, i,
+						   i + sizeof(arm_instr_t),
+						   true, false);
+			}
+			
+			if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
+				int u = arm_instr_get_param(instr, ip, 2);
+				int rn = arm_instr_get_param(instr, ip, 6);
+				int imm = arm_instr_get_param(instr, ip, 8);
+
+				if (rn == 15 && cond != ARM_COND_NV) {
+					arm_addr_t target = i + 8 +
+						(imm * (u ? 1 : -1));
+					reference_data_add(datarefs_map, i,
+							   target);
+				}
+			}
 		}
 
 		i += sizeof(arm_instr_t);

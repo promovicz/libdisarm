@@ -146,48 +146,19 @@ main(int argc, char *argv[])
 	}
 
 	/* basic block analysis */
-	map<arm_addr_t, bool> bb_map;
+	map<arm_addr_t, basic_block_t *> bb_map;
 	map<arm_addr_t, list<ref_code_t *> *> coderefs_map;
 	map<arm_addr_t, list<ref_data_t *> *> datarefs_map;
 
-	r = bb_instr_analysis(&bb_map, &ep_list, &sym_map,
-			      &coderefs_map, &datarefs_map, image);
+	r = basicblock_analysis(&bb_map, &ep_list, &sym_map,
+				&coderefs_map, &datarefs_map, image);
 	if (r < 0) {
 		cerr << "Unable to finish basic block analysis." << endl;
 		exit(EXIT_FAILURE);
 	}
 
-	/* code/data separation */
-	FILE *jump_file = NULL;
-	if (argc >= 5) {
-		jump_file = fopen(argv[4], "r");
-		if (jump_file == NULL) {
-			perror("fopen");
-			exit(EXIT_FAILURE);
-		}
-	}
 
-	uint8_t *image_codemap;
-	r = codesep_analysis(&ep_list, image, &image_codemap, jump_file);
-	if (r < 0) {
-		perror("code_data_separate");
-		exit(EXIT_FAILURE);
-	}
-
-	if (jump_file) fclose(jump_file);
-
-	/*
-	FILE *codemap_out = fopen("code_bitmap", "wb");
-	if (codemap_out == NULL) return -1;
-	size_t write = fwrite(image_codemap, sizeof(uint8_t),
-			      image->size >> 2, codemap_out);
-	if (write < (image->size >> 2)) {
-		cerr << "Unable to write codemap." << endl;
-	}
-	fclose(codemap_out);
-	*/
-
-	bool bb_code = true;
+	basic_block_t *bb = NULL;
 
 	/* print instructions */
 	uint_t i = 0;
@@ -204,17 +175,16 @@ main(int argc, char *argv[])
 		if (basicblock_is_addr_entry(&bb_map, i)) {
 			cout << endl << BLOCK_SEPARATOR << endl;
 
-			uint_t bb_size;
-			basicblock_find(&bb_map, i, NULL, &bb_size, &bb_code);
+			basicblock_find(&bb_map, i, NULL, &bb);
 
-			if (bb_code) {
+			if (bb->code) {
 				/* reg use/change analysis */
 				uint_t bb_use_regs = 0;
 				uint_t bb_change_regs = 0;
 				uint_t bb_use_flags = 0;
 				uint_t bb_change_flags = 0;
 
-				arm_addr_t addr = i + bb_size;
+				arm_addr_t addr = i + bb->size;
 				while (addr > i) {
 					addr -= sizeof(arm_addr_t);
 
@@ -413,7 +383,7 @@ main(int argc, char *argv[])
 
 		/* instruction */
 		cout << hex << setw(8) << setfill('0') << i << "\t";
-		if (bb_code) {
+		if (bb->code) {
 			cout << hex << setw(8) << setfill('0') << instr
 			     << "\t";
 			arm_instr_fprint(stdout, instr, i, &sym_map, image);
