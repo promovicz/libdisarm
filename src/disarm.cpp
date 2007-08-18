@@ -147,9 +147,7 @@ print_basic_block_code(basic_block_t *bb, image_t *image,
 {
 	int r;
 
-	arm_instr_t instr;
-	r = image_read_word(image, bb->addr, &instr);
-	if (r == 0) return 0;
+	if (!image_is_addr_mapped(image, bb->addr)) return 0;
 
 	cout << endl
 	     << BLOCK_SEPARATOR << endl;
@@ -349,9 +347,7 @@ print_basic_block_data(basic_block_t *bb, image_t *image,
 {
 	int r;
 
-	arm_instr_t instr;
-	r = image_read_word(image, bb->addr, &instr);
-	if (r == 0) return 0;
+	if (!image_is_addr_mapped(image, bb->addr)) return 0;
 
 	cout << endl
 	     << BLOCK_SEPARATOR << endl
