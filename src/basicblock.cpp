@@ -23,6 +23,35 @@ bb_cmp_t::operator()(const basic_block_t *bb1,
 }
 
 static void
+data_block_merge(basic_block_t *bb, basic_block_t *bb_next)
+{
+	/* move data refs */
+	while (!bb_next->d.data_refs.empty()) {
+		map<basic_block_t *, ref_data_t *>::iterator ref_iter;
+		ref_iter = bb_next->d.data_refs.begin();
+
+		basic_block_t *bb_source = ref_iter->first;
+		ref_data_t *ref = ref_iter->second;
+		bb_next->d.data_refs.erase(ref_iter);
+
+		if (ref->remove) {
+			delete ref;
+			continue;
+		}
+
+		bb_source->c.data_refs.erase(bb_next);
+		bb_source->c.data_refs.insert(make_pair(bb, ref));
+		bb->d.data_refs.insert(make_pair(bb_source, ref));
+	}
+
+	/* update size */
+	bb->size += bb_next->size;
+
+	/* delete merged block */
+	delete bb_next;
+}
+
+static void
 mark_bb_data(basic_block_t *bb_source)
 {
 	stack<basic_block_t *> stack;
@@ -88,6 +117,8 @@ reference_code_add(map<arm_addr_t, basic_block_t *> *bb_map,
 	map<arm_addr_t, basic_block_t *>::iterator bb_iter;
 	basic_block_t *bb_target;
 	bb_iter = bb_map->find(target);
+	if (bb_iter == bb_map->end()) return 0;
+
 	bb_target = bb_iter->second;
 
 	if (!bb_target->code) {
@@ -123,7 +154,6 @@ reference_data_add(map<arm_addr_t, basic_block_t *> *bb_map,
 	bb_iter--;
 
 	bb_target = bb_iter->second;
-
 	if (bb_target == bb_source) return 0;
 
 	ref_data_t *ref = new ref_data_t;
@@ -140,34 +170,12 @@ reference_data_add(map<arm_addr_t, basic_block_t *> *bb_map,
 	return 0;
 }
 
-void
-basicblock_find(map<arm_addr_t, basic_block_t *> *bb_map, arm_addr_t addr,
-		arm_addr_t *bb_addr, basic_block_t **bb)
-{
-	map<arm_addr_t, basic_block_t *>::iterator iter =
-		bb_map->upper_bound(addr);
-	arm_addr_t bb_end = iter->first;
-
-	iter--;
-
-	if (bb_addr != NULL) *bb_addr = iter->first;
-	if (bb != NULL) {
-		*bb = iter->second;
-		if ((*bb)->size == 0) (*bb)->size = bb_end - iter->first;
-	}
-}
-
-bool
-basicblock_is_addr_entry(map<arm_addr_t, basic_block_t *> *bb_map,
-			 arm_addr_t addr)
-{
-	map<arm_addr_t, basic_block_t *>::iterator iter = bb_map->find(addr);
-	return (iter != bb_map->end());
-}
-
 static void
-basicblock_add(map<arm_addr_t, basic_block_t *> *bb_map, arm_addr_t addr)
+basicblock_add(map<arm_addr_t, basic_block_t *> *bb_map, arm_addr_t addr,
+	       image_t *image)
 {
+	if (!image_is_addr_mapped(image, addr)) return;
+
 	basic_block_t *bb = new basic_block_t;
 	if (bb == NULL) abort();
 
@@ -202,16 +210,18 @@ bb_pass_mark(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 			int target = arm_instr_branch_target(offset, addr);
 
 			/* basic block for fall-through */
-			basicblock_add(bb_map, addr + sizeof(arm_instr_t));
+			basicblock_add(bb_map, addr + sizeof(arm_instr_t),
+				       image);
 
 			/* basic block for branch target */
-			basicblock_add(bb_map, target);
+			basicblock_add(bb_map, target, image);
 		} else {	
 			r = arm_instr_is_reg_changed(instr, 15);
 			if (r < 0) return -1;
 			else if (r) {
 				basicblock_add(bb_map,
-					       addr + sizeof(arm_instr_t));
+					       addr + sizeof(arm_instr_t),
+					       image);
 			}
 		}
 
@@ -222,48 +232,31 @@ bb_pass_mark(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 }
 
 static int
-bb_pass_second(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
+bb_pass_size(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 {
 	int r;
 
 	map<arm_addr_t, basic_block_t *>::iterator bb_iter = bb_map->begin();
-	basic_block_t *bb = bb_iter->second;
-	bb_iter++;
-	arm_addr_t bb_next = bb_iter->first;
-
-	arm_addr_t addr = 0;
-	while (1) {
-		arm_instr_t instr;
-		r = image_read_word(image, addr, &instr);
-		if (r == 0) {
-			bb->size = addr - bb->addr;
-			break;
-		} else if (r < 0) return -1;
-
-		/* basic block size */
-		if (addr == bb_next) {
-			bb->size = addr - bb->addr;
-			bb = bb_iter->second;
-			bb_iter++;
-			bb_next = bb_iter->first;
+	if (bb_iter != bb_map->end()) {
+		basic_block_t *bb_prev = (bb_iter++)->second;
+		while (bb_iter != bb_map->end()) {
+			basic_block_t *bb = (bb_iter++)->second;
+			bb_prev->size = bb->addr - bb_prev->addr;
+			bb_prev = bb;
 		}
 
-		/* code/data analysis */
-		bool unpredictable;
-		r = arm_instr_is_unpredictable(instr, &unpredictable);
-		if (r < 0) return -1;
-
-		if (unpredictable) mark_bb_data(bb);;
-
-		addr += sizeof(arm_instr_t);
+		/* find size of last block */
+		arm_addr_t addr = bb_prev->addr;
+		while (image_is_addr_mapped(image, addr)) addr += 4;
+		bb_prev->size = addr - bb_prev->addr;
 	}
 
 	return 0;
 }
 
 static int
-block_find_references(basic_block_t *bb,
-		      map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
+block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
+		 image_t *image)
 {
 	int r;
 
@@ -274,6 +267,17 @@ block_find_references(basic_block_t *bb,
 		if (r == 0) break;
 		else if (r < 0) return -1;
 
+		/* code/data analysis */
+		bool unpredictable;
+		r = arm_instr_is_unpredictable(instr, &unpredictable);
+		if (r < 0) return -1;
+
+		if (unpredictable) {
+			mark_bb_data(bb);
+			break;
+		}
+
+		/* find references */
 		const arm_instr_pattern_t *ip =
 			arm_instr_get_instr_pattern(instr);
 		if (ip == NULL) {
@@ -344,18 +348,43 @@ block_find_references(basic_block_t *bb,
 }
 
 static int
-bb_pass_reference(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
+bb_pass_third(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 {
 	int r;
 
 	map<arm_addr_t, basic_block_t *>::iterator bb_iter = bb_map->begin();
-	for (bb_iter = bb_map->begin(); bb_iter != bb_map->end(); bb_iter++) {
-		basic_block_t *bb = bb_iter->second;
+	while (bb_iter != bb_map->end()) {
+		basic_block_t *bb = (bb_iter++)->second;
 
-		if (!bb->code) continue;
+		if (bb->code) {
+			r = block_pass_third(bb, bb_map, image);
+			if (r < 0) return -1;
+		}
+	}
 
-		r = block_find_references(bb, bb_map, image);
-		if (r < 0) return -1;
+	return 0;
+}
+
+static int
+bb_pass_merge(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
+{
+	int r;
+
+	map<arm_addr_t, basic_block_t *>::iterator bb_iter, bb_save;
+	bb_iter = bb_map->begin();
+	if (bb_iter != bb_map->end()) {
+		basic_block_t *bb_prev = (bb_iter++)->second;
+		while (bb_iter != bb_map->end()) {
+			bb_save = bb_iter++;
+			basic_block_t *bb = bb_save->second;
+
+			if (!bb_prev->code && !bb->code) {
+				data_block_merge(bb_prev, bb);
+				bb_map->erase(bb_save);
+			} else {
+				bb_prev = bb;
+			}
+		}
 	}
 
 	return 0;
@@ -371,7 +400,7 @@ basicblock_analysis(map<arm_addr_t, basic_block_t *> *bb_map,
 	list<arm_addr_t>::iterator entrypoint_iter;
 	for (entrypoint_iter = entrypoints->begin();
 	     entrypoint_iter != entrypoints->end(); entrypoint_iter++) {
-		basicblock_add(bb_map, (*entrypoint_iter));
+		basicblock_add(bb_map, (*entrypoint_iter), image);
 	}
 
 	/* first pass: */
@@ -381,13 +410,18 @@ basicblock_analysis(map<arm_addr_t, basic_block_t *> *bb_map,
 
 	/* second pass: */
 	/* save basic block size */
-	/* do code/data analysis */
-	r = bb_pass_second(bb_map, image);
+	r = bb_pass_size(bb_map, image);
 	if (r < 0) return -1;
 
 	/* third pass: */
+	/* do code/data analysis */
 	/* collect references */
-	r = bb_pass_reference(bb_map, image);
+	r = bb_pass_third(bb_map, image);
+	if (r < 0) return -1;
+
+	/* fourth pass: */
+	/* merge adjacent blocks */
+	r = bb_pass_merge(bb_map, image);
 	if (r < 0) return -1;
 
 	return 0;

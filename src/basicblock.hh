@@ -55,10 +55,6 @@ struct basic_block {
 };
 
 
-void basicblock_find(map<arm_addr_t, basic_block_t *> *bb_map, arm_addr_t addr,
-		     arm_addr_t *bb_addr, basic_block_t **bb);
-bool basicblock_is_addr_entry(map<arm_addr_t, basic_block_t *> *bb_map,
-			      arm_addr_t addr);
 int basicblock_analysis(map<arm_addr_t, basic_block_t *> *bb_map,
 			list<arm_addr_t> *entrypoints, image_t *image);
 
