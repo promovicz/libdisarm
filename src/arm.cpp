@@ -592,6 +592,28 @@ arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg)
 }
 
 int
+arm_instr_is_flag_used(arm_instr_t instr, uint_t flag)
+{
+	int r;
+	uint_t flags;
+	r = arm_instr_used_flags(instr, &flags);
+	if (r < 0) return -1;
+
+	return (flags & (1 << flag));
+}
+
+int
+arm_instr_is_flag_changed(arm_instr_t instr, uint_t flag)
+{
+	int r;
+	uint_t flags;
+	r = arm_instr_changed_flags(instr, &flags);
+	if (r < 0) return -1;
+
+	return (flags & (1 << flag));
+}
+
+int
 arm_instr_used_regs(arm_instr_t instr, uint_t *reglist)
 {
 	const arm_instr_pattern_t *ip =

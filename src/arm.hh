@@ -214,6 +214,9 @@ int arm_instr_is_unpredictable(arm_instr_t instr, bool *unpredictable);
 arm_addr_t arm_instr_branch_target(int offset, arm_addr_t address);
 int arm_instr_is_reg_used(arm_instr_t instr, uint_t reg);
 int arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg);
+int arm_instr_is_flag_used(arm_instr_t instr, uint_t flag);
+int arm_instr_is_flag_changed(arm_instr_t instr, uint_t flag);
+
 int arm_instr_used_regs(arm_instr_t instr, uint_t *reglist);
 int arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist);
 int arm_instr_used_flags(arm_instr_t instr, uint_t *flags);
