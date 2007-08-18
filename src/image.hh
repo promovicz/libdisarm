@@ -41,6 +41,7 @@ int image_create_mapping(image_t *image, arm_addr_t addr, uint_t size,
 			 const char *filename, uint_t offset, bool read,
 			 bool write, bool big_endian);
 void image_remove_mapping(image_t *image, arm_addr_t addr);
+bool image_is_addr_mapped(image_t *image, arm_addr_t addr);
 int image_read(image_t *image, arm_addr_t addr, void *dest, uint_t size);
 int image_read_byte(image_t *image, arm_addr_t addr, uint8_t *dest);
 int image_read_hword(image_t *image, arm_addr_t addr, uint16_t *dest);

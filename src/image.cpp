@@ -174,6 +174,13 @@ image_find_mapping(image_t *image, arm_addr_t addr)
 	return mapping;
 }
 
+bool
+image_is_addr_mapped(image_t *image, arm_addr_t addr)
+{
+	image_mapping_t *mapping = image_find_mapping(image, addr);
+	return (mapping != NULL && mapping->file != NULL);
+}
+
 /* no endianness correction is done */
 int
 image_read(image_t *image, arm_addr_t addr, void *dest, uint_t size)
