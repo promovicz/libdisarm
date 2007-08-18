@@ -47,5 +47,5 @@ echo "
 
     prefix:		${prefix}
     compiler:		${CXX}
-    cflags:		${CXXFLAGS}
+    cxxflags:		${CXXFLAGS}
 "
