@@ -26,30 +26,6 @@ using namespace std;
 #define BLOCK_SEPARATOR  \
   "; --------------------------------------------------------------------"
 
-static char
-get_print_char(uint8_t data)
-{
-	if (data >= 32 && data <= 126) return data;
-	else return '.';
-}
-
-static void
-print_data(uint32_t data)
-{
-	cout << hex << setw(2) << setfill('0')
-	     << ((data & 0xff000000) >> 24) << " "
-	     << hex << setw(2) << setfill('0')
-	     << ((data & 0xff0000) >> 16) << " "
-	     << hex << setw(2) << setfill('0')
-	     << ((data & 0xff00) >> 8) << " "
-	     << hex << setw(2) << setfill('0')
-	     << (data & 0xff) << "\t|"
-	     << get_print_char((data & 0xff000000) >> 24)
-	     << get_print_char((data & 0xff0000) >> 16)
-	     << get_print_char((data & 0xff00) >> 8)
-	     << get_print_char(data & 0xff)
-	     << "|" << endl;
-}
 
 static int
 entry_point_add(list<arm_addr_t> *ep_list, arm_addr_t addr)
@@ -151,6 +127,9 @@ print_basic_block_code(basic_block_t *bb, image_t *image,
 
 	cout << endl
 	     << BLOCK_SEPARATOR << endl;
+	if (bb->type != BASIC_BLOCK_TYPE_CODE) {
+		cout << "; UNKNOWN BLOCK TYPE" << endl;
+	}
 
 	/* reg use/change analysis */
 	uint_t bb_use_regs = 0;
@@ -341,6 +320,36 @@ print_basic_block_code(basic_block_t *bb, image_t *image,
 	return 0;
 }
 
+static char
+get_print_char(uint8_t data)
+{
+	if (data >= 32 && data <= 126) return data;
+	else return '.';
+}
+
+static void
+print_data_line(arm_addr_t addr, uint_t offset, uint_t length,
+		uint8_t *data, uint_t size)
+{
+	cout << hex << setw(8) << setfill('0') << addr << "\t";
+
+	/* hex data */
+	for (uint_t i = 0; i < offset; i++) cout << "   ";
+	for (uint_t i = 0; i < size; i++) {
+		cout << hex << setw(2) << setfill('0')
+		     << static_cast<int>(data[i]) << " ";
+	}
+	for (uint_t i = 0; i < length - offset - size; i++) cout << "   ";
+
+	/* char data */
+	for (uint_t i = 0; i < offset; i++) cout << " ";
+	cout << " |";
+	for (uint_t i = 0; i < size; i++) {
+		cout << get_print_char(data[i]);
+	}
+	cout << "|" << endl;
+}
+
 static int
 print_basic_block_data(basic_block_t *bb, image_t *image,
 		       map<arm_addr_t, char *> *sym_map)
@@ -359,19 +368,23 @@ print_basic_block_data(basic_block_t *bb, image_t *image,
 	/* data references */
 	print_data_references(bb, sym_map);
 
-	arm_addr_t addr = bb->addr;
-	while (addr < bb->addr + bb->size) {
-		arm_instr_t instr;
-		r = image_read_word(image, addr, &instr);
-		if (r == 0) break;
-		else if (r < 0) return -1;
+	/* read data */
+	uint8_t *data = new uint8_t[bb->size];
+	r = image_read(image, bb->addr, data, bb->size);
+	if (r < bb->size) return -1;
 
-		/* print data */
-		cout << hex << setw(8) << setfill('0') << addr << "\t";
-		print_data(instr);
+	/* first line */
+	print_data_line(bb->addr & ~0xf, bb->addr & 0xf, 0x10, data,
+			min(0x10 - (bb->addr & 0xf), bb->size));
 
-		addr += sizeof(arm_instr_t);
+	arm_addr_t addr = 0x10 - (bb->addr & 0xf);
+	while (addr < bb->size) {
+		print_data_line((bb->addr + addr) & ~0xf, 0, 0x10, &data[addr],
+				min(static_cast<uint_t>(16), bb->size - addr));
+		addr += 0x10;
 	}
+
+	delete data;
 
 	return 0;
 }
@@ -462,6 +475,49 @@ main(int argc, char *argv[])
 		fclose(symbol_file);
 	}
 
+	/* load extra entry points */
+	if (argc >= 5) {
+		FILE *ep_file = fopen(argv[4], "r");
+		if (ep_file == NULL) {
+			perror("fopen");
+			exit(EXIT_FAILURE);
+		}
+
+		int r;
+		char *text = NULL;
+		size_t textlen = 0;
+		ssize_t read;
+
+		while ((read = getline(&text, &textlen, ep_file)) != -1) {
+			if (read == 0 || !strcmp(text, "\n") ||
+			    !strncmp(text, "#", 1)) {
+				continue;
+			} else {
+				errno = 0;
+				char *endptr;
+				arm_addr_t addr = strtol(text, &endptr, 16);
+
+				if ((errno == ERANGE &&
+				     (addr == LONG_MAX || addr == LONG_MIN))
+				    || (errno != 0 && addr == 0)
+				    || (endptr == text)) {
+					delete text;
+					cerr << "Unable to parse address."
+					     << endl;
+					return -1;
+				}
+
+				r = entry_point_add(&ep_list, addr);
+				if (r < 0) {
+					perror("entry_point_add");
+					exit(EXIT_FAILURE);
+				}
+			}
+		}
+
+		if (text) delete text;
+	}
+
 	/* basic block analysis */
 	map<arm_addr_t, basic_block_t *> bb_map;
 	r = basicblock_analysis(&bb_map, &ep_list, image);
@@ -476,7 +532,8 @@ main(int argc, char *argv[])
 	for (bb_iter = bb_map.begin(); bb_iter != bb_map.end(); bb_iter++) {
 		basic_block_t *bb = bb_iter->second;
 
-		if (bb->code) {
+		if (bb->type == BASIC_BLOCK_TYPE_CODE ||
+		    bb->type == BASIC_BLOCK_TYPE_UNKNOWN) {
 			r = print_basic_block_code(bb, image, &sym_map);
 			if (r < 0) {
 				perror("print_basic_block_code");

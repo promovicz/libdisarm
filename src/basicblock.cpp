@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include <iostream>
 #include <list>
 #include <map>
 #include <stack>
@@ -62,7 +63,7 @@ mark_bb_data(basic_block_t *bb_source)
 		basic_block_t *bb = stack.top();
 		stack.pop();
 
-		bb->code = false;
+		bb->type = BASIC_BLOCK_TYPE_DATA;
 
 		/* remove outgoing refs */
 		while (!bb->c.out_refs.empty()) {
@@ -100,7 +101,57 @@ mark_bb_data(basic_block_t *bb_source)
 			if (ref->remove) delete ref;
 			else ref->remove = true;
 
-			stack.push(bb_next);
+			if (bb_next->type == BASIC_BLOCK_TYPE_UNKNOWN) {
+				stack.push(bb_next);
+			}
+		}
+	}
+}
+
+static void
+mark_bb_code(basic_block_t *bb_source)
+{
+	stack<basic_block_t *> stack;
+
+	stack.push(bb_source);
+
+	while (!stack.empty()) {
+		basic_block_t *bb = stack.top();
+		stack.pop();
+
+		bb->type = BASIC_BLOCK_TYPE_CODE;
+
+		/* remove incoming data refs */
+		while (!bb->d.data_refs.empty()) {
+			map<basic_block_t *, ref_data_t *>::iterator ref_iter;
+			ref_iter = bb->d.data_refs.begin();
+
+			ref_data_t *ref = ref_iter->second;
+			bb->d.data_refs.erase(ref_iter);
+
+			if (ref->remove) delete ref;
+			else ref->remove = true;
+		}
+
+
+		/* mark outgoing data refs as data blocks */
+		map<basic_block_t *, ref_data_t *>::iterator data_iter;
+		for (data_iter = bb->c.data_refs.begin();
+		     data_iter != bb->c.data_refs.end(); data_iter++) {
+			basic_block_t *bb_ref = data_iter->first;
+			if (bb_ref->type == BASIC_BLOCK_TYPE_UNKNOWN) {
+				mark_bb_data(bb_ref);
+			}
+		}
+
+		/* add outgoing blocks to stack */
+		map<basic_block_t *, ref_code_t *>::iterator code_iter;
+		for (code_iter = bb->c.out_refs.begin();
+		     code_iter != bb->c.out_refs.end(); code_iter++) {
+			basic_block_t *bb_ref = code_iter->first;
+			if (bb_ref->type == BASIC_BLOCK_TYPE_UNKNOWN) {
+				stack.push(bb_ref);
+			}
 		}
 	}
 }
@@ -121,7 +172,7 @@ reference_code_add(map<arm_addr_t, basic_block_t *> *bb_map,
 
 	bb_target = bb_iter->second;
 
-	if (!bb_target->code) {
+	if (bb_target->type == BASIC_BLOCK_TYPE_DATA) {
 		mark_bb_data(bb_source);
 		return 1;
 	}
@@ -179,7 +230,7 @@ basicblock_add(map<arm_addr_t, basic_block_t *> *bb_map, arm_addr_t addr,
 	if (bb == NULL) abort();
 
 	bb->addr = addr;
-	bb->code = true;
+	bb->type = BASIC_BLOCK_TYPE_UNKNOWN;
 	bb->size = 0;
 
 	(*bb_map)[addr] = bb;
@@ -257,13 +308,13 @@ bb_pass_size(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 	return 0;
 }
 
-#include <iostream>
-#include <iomanip>
-
+/* Try to backtrack to last cmp rREG, #X instruction and return X. */
 static int
 block_backtrack_reg_bounds(basic_block_t *bb, arm_addr_t addr, uint_t reg,
 			   image_t *image)
 {
+	assert(addr >= bb->addr && addr < bb->addr + bb->size);
+
 	int r;
 
 	if (addr == bb->addr) return -1;
@@ -336,36 +387,29 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 			arm_instr_get_instr_pattern(instr);
 		if (ip == NULL) continue;
 
+		int cond;
+		bool change_r15 = false;
+
 		if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK) {
-			int cond = arm_instr_get_param(instr, ip, 0);
+			cond = arm_instr_get_param(instr, ip, 0);
 			int link = arm_instr_get_param(instr, ip, 1);
 			int offset = arm_instr_get_param(instr, ip, 2);
 			int target = arm_instr_branch_target(offset, addr);
 
-			if (!link && cond != ARM_COND_AL) {
-				/* fall-through reference */
-				r = reference_code_add(bb_map, bb, addr,
-						       addr +
-						       sizeof(arm_instr_t),
-						       (cond != ARM_COND_AL),
-						       false);
-				if (r < 0) return -1;
-				else if (r == 1) break;
-			}
+			/* also add fall through ref on link */
+			if (!link) change_r15 = true;
 
 			/* target reference */
 			r = reference_code_add(bb_map, bb, addr, target,
 					       (cond != ARM_COND_AL), link);
 			if (r < 0) return -1;
 			else if (r == 1) break;
-
-			continue;
 		} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT) {
-			int cond, opcode, s, rn, rd, sha, sh, rm;
+			int opcode, s, rn, rd, sha, sh, rm;
 			r = arm_instr_get_params(instr, ip, 8, &cond,
 						   &opcode, &s, &rn, &rd,
 						   &sha, &sh, &rm);
-			if (r < 0) abort();
+			assert(!(r < 0));
 
 			if (cond == ARM_COND_LS &&
 			    opcode == ARM_DATA_OPCODE_ADD &&
@@ -389,56 +433,74 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 					}
 					if (r == 1) break;
 
-					/* add fall-through */
-					r = reference_code_add(
-						bb_map, bb, addr,
-						addr + sizeof(arm_instr_t),
-						true, false);
-					if (r < 0) return -1;
-					else if (r == 1) break;
-
-					continue;
+					change_r15 = true;
 				}
+			} else if ((opcode < ARM_DATA_OPCODE_TST &&
+				    opcode > ARM_DATA_OPCODE_CMN) &&
+				   rd == 15) {
+				change_r15 = true;
+			}
+		} else if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
+			int p, u, b, w, load, rn, rd, imm;
+			r = arm_instr_get_params(instr, ip, 9, &cond, &p, &u,
+						 &b, &w, &load, &rn, &rd,
+						 &imm);
+			assert(!(r < 0));
+
+			/* data reference */
+			if (rn == 15 && cond != ARM_COND_NV) {
+				arm_addr_t target = addr + 8 +
+					(imm * (u ? 1 : -1));
+				reference_data_add(bb_map, bb, addr,
+						   target, (b ? 1 : 4));
+			}
+
+
+			/* code reference */
+			if (load && rd == 15) {
+				if (p && !w && rn == 15) {
+					int off = imm * (u ? 1 : -1);
+					arm_addr_t target = addr + off + 8;
+
+					uint32_t jump_target;
+					r = image_read_word(image, target,
+							    &jump_target);
+					if (r >= 0) {
+						r = reference_code_add(
+							bb_map, bb, addr,
+							jump_target,
+							(cond != ARM_COND_AL),
+							false);
+						if (r < 0) return -1;
+						else if (r == 1) break;
+					}
+				}
+
+				change_r15 = true;
+			}
+		} else {
+			arm_cond_t c;
+			r = arm_instr_get_cond(instr, &c);
+			if (r < 0) c = ARM_COND_AL;
+			cond = static_cast<int>(c);
+
+			/* r15 is changed */
+			r = arm_instr_is_reg_changed(instr, 15);
+			if (r < 0) return -1;
+			else if (r) {
+				change_r15 = true;;
 			}
 		}
 
-
-		arm_cond_t cond;
-		r = arm_instr_get_cond(instr, &cond);
-		if (r < 0) cond = ARM_COND_AL;
-
-		/* r15 is changed */
-		r = arm_instr_is_reg_changed(instr, 15);
-		if (r < 0) return -1;
-		else if (r && cond != ARM_COND_AL) {
-			/* fall-through reference */
+		/* add fall-through reference */
+		if (change_r15 && (cond != ARM_COND_AL) &&
+		    addr == (bb->addr + bb->size - sizeof(arm_instr_t))) {
+			/* last instruction in block */
 			r = reference_code_add(bb_map, bb, addr,
 					       addr + sizeof(arm_instr_t),
 					       true, false);
 			if (r < 0) return -1;
 			else if (r == 1) break;
-		} else if (!r && addr == (bb->addr + bb->size -
-					  sizeof(arm_instr_t))) {
-			/* last instruction in block */
-			r = reference_code_add(bb_map, bb, addr,
-					       addr + sizeof(arm_instr_t),
-					       false, false);
-			if (r < 0) return -1;
-			else if (r == 1) break;
-		}
-
-		/* data reference */
-		if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
-			int u = arm_instr_get_param(instr, ip, 2);
-			int rn = arm_instr_get_param(instr, ip, 6);
-			int imm = arm_instr_get_param(instr, ip, 8);
-
-			if (rn == 15 && cond != ARM_COND_NV) {
-				arm_addr_t target = addr + 8 +
-					(imm * (u ? 1 : -1));
-				reference_data_add(bb_map, bb, addr,
-						   target, 4);
-			}
 		}
 	}
 
@@ -454,7 +516,7 @@ bb_pass_third(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 	while (bb_iter != bb_map->end()) {
 		basic_block_t *bb = (bb_iter++)->second;
 
-		if (bb->code) {
+		if (bb->type != BASIC_BLOCK_TYPE_DATA) {
 			r = block_pass_third(bb, bb_map, image);
 			if (r < 0) return -1;
 		}
@@ -476,7 +538,8 @@ bb_pass_merge(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 			bb_save = bb_iter++;
 			basic_block_t *bb = bb_save->second;
 
-			if (!bb_prev->code && !bb->code) {
+			if (bb_prev->type == BASIC_BLOCK_TYPE_DATA &&
+			    bb->type == BASIC_BLOCK_TYPE_DATA) {
 				/* merge data blocks */
 				data_block_merge(bb_prev, bb);
 				bb_map->erase(bb_save);
@@ -484,6 +547,20 @@ bb_pass_merge(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 				bb_prev = bb;
 			}
 		}
+	}
+
+	return 0;
+}
+
+static int
+bb_pass_codetree(map<arm_addr_t, basic_block_t *> *bb_map,
+		 list<arm_addr_t> *entrypoints)
+{
+	/* entrypoints */
+	list<arm_addr_t>::iterator entrypoint_iter;
+	for (entrypoint_iter = entrypoints->begin();
+	     entrypoint_iter != entrypoints->end(); entrypoint_iter++) {
+		mark_bb_code((*bb_map)[*entrypoint_iter]);
 	}
 
 	return 0;
@@ -519,6 +596,12 @@ basicblock_analysis(map<arm_addr_t, basic_block_t *> *bb_map,
 	if (r < 0) return -1;
 
 	/* fourth pass: */
+	/* follow reference tree from entrypoints and
+	   mark code blocks */
+	r = bb_pass_codetree(bb_map, entrypoints);
+	if (r < 0) return -1;
+
+	/* fifth pass: */
 	/* merge adjacent blocks */
 	r = bb_pass_merge(bb_map, image);
 	if (r < 0) return -1;

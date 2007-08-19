@@ -46,10 +46,17 @@ typedef struct {
 	multimap<basic_block_t *, ref_data_t *, bb_cmp_t> data_refs;
 } bb_data_t;
 
+typedef enum {
+	BASIC_BLOCK_TYPE_CODE,
+	BASIC_BLOCK_TYPE_DATA,
+	BASIC_BLOCK_TYPE_UNKNOWN,
+	BASIC_BLOCK_TYPE_MAX
+} basic_block_type_t;
+
 struct basic_block {
 	arm_addr_t addr;
 	uint_t size;
-	bool code;
+	basic_block_type_t type;
 	bb_code_t c;
 	bb_data_t d;
 };
