@@ -348,8 +348,55 @@ block_backtrack_reg_bounds(basic_block_t *bb, arm_addr_t addr, uint_t reg,
 			if (cond == ARM_COND_AL &&
 			    opcode == ARM_DATA_OPCODE_CMP && rn == reg) {
 				return rot_imm;
-			} else {
-				return -1;
+			}
+		}
+
+		return -1;
+	}
+
+	return -1;
+}
+
+/* Try to backtrack to last add rREG, r15, rX instruction and
+   return r15 + X + 8. */
+static int
+block_backtrack_reg_add_pc(basic_block_t *bb, arm_addr_t addr, uint_t reg,
+			   image_t *image, arm_addr_t *data)
+{
+	assert(addr >= bb->addr && addr < bb->addr + bb->size);
+
+	int r;
+
+	if (addr == bb->addr) return -1;
+	addr -= sizeof(arm_instr_t);
+
+	for (; addr >= bb->addr; addr -= sizeof(arm_instr_t)) {
+		arm_instr_t instr;
+		r = image_read_word(image, addr, &instr);
+		if (r <= 0) return -1;
+
+		if (!arm_instr_is_reg_changed(instr, 14)) continue;
+
+		/* instr does change r14 */
+		const arm_instr_pattern_t *ip =
+			arm_instr_get_instr_pattern(instr);
+		if (ip == NULL) return -1;
+
+		if (ip->type == ARM_INSTR_TYPE_DATA_IMM) {
+			int cond, opcode, s, rn, rd, rot, imm;
+			r = arm_instr_get_params(instr, ip, 7, &cond,
+						 &opcode, &s, &rn, &rd,
+						 &rot, &imm);
+			assert(!(r < 0));
+
+			uint_t rot_imm = (imm >> (rot << 1)) |
+				(imm << (32 - (rot << 1)));
+
+			if (cond == ARM_COND_AL &&
+			    opcode == ARM_DATA_OPCODE_ADD &&
+			    rd == reg && rn == 15) {
+				*data = addr + rot_imm + 8;
+				return 0;
 			}
 		}
 
@@ -388,7 +435,7 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 		if (ip == NULL) continue;
 
 		int cond;
-		bool change_r15 = false;
+		bool check_fall_through = false;
 
 		if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK) {
 			cond = arm_instr_get_param(instr, ip, 0);
@@ -397,7 +444,9 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 			int target = arm_instr_branch_target(offset, addr);
 
 			/* also add fall through ref on link */
-			if (!link) change_r15 = true;
+			if (link) {
+				check_fall_through = true;
+			}
 
 			/* target reference */
 			r = reference_code_add(bb_map, bb, addr, target,
@@ -433,12 +482,30 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 					}
 					if (r == 1) break;
 
-					change_r15 = true;
+					check_fall_through = true;
 				}
+			} else if (cond == ARM_COND_AL &&
+				   opcode == ARM_DATA_OPCODE_MOV &&
+				   rd == 15 && sh == ARM_DATA_SHIFT_LSL &&
+				   sha == 0) {
+				/* could be a link */
+				arm_addr_t r14_data;
+				r = block_backtrack_reg_add_pc(bb, addr, 14,
+							       image,
+							       &r14_data);
+				if (r >= 0 &&
+				    r14_data == addr + sizeof(arm_instr_t)) {
+					r = reference_code_add(bb_map, bb,
+							       addr, r14_data,
+							       false, true);
+					if (r < 0) return -1;
+					else if (r == 1) break;
+				}
+				check_fall_through = true;
 			} else if ((opcode < ARM_DATA_OPCODE_TST &&
 				    opcode > ARM_DATA_OPCODE_CMN) &&
 				   rd == 15) {
-				change_r15 = true;
+				check_fall_through = true;
 			}
 		} else if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
 			int p, u, b, w, load, rn, rd, imm;
@@ -476,7 +543,7 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 					}
 				}
 
-				change_r15 = true;
+				check_fall_through = true;
 			}
 		} else {
 			arm_cond_t c;
@@ -488,12 +555,12 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 			r = arm_instr_is_reg_changed(instr, 15);
 			if (r < 0) return -1;
 			else if (r) {
-				change_r15 = true;;
+				check_fall_through = true;;
 			}
 		}
 
-		/* add fall-through reference */
-		if (change_r15 && (cond != ARM_COND_AL) &&
+		/* check fall-through reference */
+		if (check_fall_through && (cond != ARM_COND_AL) &&
 		    addr == (bb->addr + bb->size - sizeof(arm_instr_t))) {
 			/* last instruction in block */
 			r = reference_code_add(bb_map, bb, addr,
