@@ -397,38 +397,64 @@ static const arm_instr_pattern_t instr_pattern[] = {
 };
 
 
+static char *
+arm_addr_simple_string(arm_addr_t addr)
+{
+	char *addrstr = NULL;
+	int r;
+
+	static const char *format = "0x%x";
+
+	r = snprintf(NULL, 0, format, addr);
+	if (r > 0) {
+		addrstr = new char[r+1];
+		if (addrstr == NULL) abort();
+		r = snprintf(addrstr, r+1, format, addr);
+		if (r <= 0) {
+			delete addrstr;
+			return NULL;
+		}
+	} else {
+		return NULL;
+	}
+
+	return addrstr;
+}
+
 char *
 arm_addr_string(arm_addr_t addr, map<arm_addr_t, char *> *sym_map)
 {
 	char *addrstr = NULL;
 	int r;
 
-	map<arm_addr_t, char *>::iterator sym;
+	if (sym_map != NULL) {
+		map<arm_addr_t, char *>::iterator sym;
+		sym = sym_map->find(addr);
 
-	if (sym_map != NULL && (sym = sym_map->find(addr)) != sym_map->end()) {
-		static const char *format = "<%s>";
-		const char *sym_name = (*sym).second;
+		if (sym == sym_map->end()) {
+			return arm_addr_simple_string(addr);
+		}
 
-		r = snprintf(NULL, 0, format, sym_name);
+		static const char *format = "<%s:0x%x>";
+		arm_addr_t sym_addr = sym->first;
+		const char *sym_name = sym->second;
+
+		r = snprintf(NULL, 0, format, sym_name, sym_addr,
+			     addr - sym_addr);
 		if (r > 0) {
 			addrstr = new char[r+1];
 			if (addrstr == NULL) abort();
-			r = snprintf(addrstr, r+1, format, sym_name);
+			r = snprintf(addrstr, r+1, format, sym_name, sym_addr,
+				     addr - sym_addr);
+			if (r <= 0) {
+				delete addrstr;
+				return NULL;
+			}
+		} else {
+			return NULL;
 		}
 	} else {
-		static const char *format = "0x%x";
-
-		r = snprintf(NULL, 0, format, addr);
-		if (r > 0) {
-			addrstr = new char[r+1];
-			if (addrstr == NULL) abort();
-			r = snprintf(addrstr, r+1, format, addr);
-		}
-	}
-
-	if (r <= 0) {
-		if (addrstr != NULL) delete addrstr;
-		return NULL;
+		return arm_addr_simple_string(addr);
 	}
 
 	return addrstr;
@@ -835,23 +861,34 @@ arm_instr_changed_regs(arm_instr_t instr, uint_t *reglist)
 
 		*reglist = 0;
 		if (cond != ARM_COND_NV) {
-			*reglist |= (1 << 15);
-			if (link) *reglist |= (1 << 14);
-			/* standard calling conventions assumed */
-			*reglist |= (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);
+			if (link) {
+				*reglist |= (1 << 14);
+				/* standard calling conventions assumed */
+				*reglist |= (1 << 0) | (1 << 1) |
+					(1 << 2) | (1 << 3);
+			} else {
+				*reglist |= (1 << 15);
+			}
 		}
 	} else if (ip->type == ARM_INSTR_TYPE_BKPT) {
 		*reglist = 0;
 	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK_THUMB) {
-		*reglist = (1 << 15) | (1 << 14);
+		*reglist = (1 << 14);
+		/* standard calling conventions assumed */
+		*reglist |= (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);
 	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_XCHG) {
-		int cond = arm_instr_get_param(instr, ip, 0);
-		if (cond != ARM_COND_NV) *reglist = (1 << 15);
-		else *reglist = 0;
-	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK_XCHG) {
 		int cond = arm_instr_get_param(instr, ip, 0);
 		if (cond != ARM_COND_NV) *reglist = (1 << 15) | (1 << 14);
 		else *reglist = 0;
+	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK_XCHG) {
+		int cond = arm_instr_get_param(instr, ip, 0);
+		if (cond != ARM_COND_NV) {
+			*reglist = (1 << 14);
+			/* standard calling conventions assumed */
+			*reglist |= (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3);
+		} else {
+			*reglist = 0;
+		}
 	} else if (ip->type == ARM_INSTR_TYPE_CP_DATA) {
 		*reglist = 0;
 	} else if (ip->type == ARM_INSTR_TYPE_CP_LS) {
