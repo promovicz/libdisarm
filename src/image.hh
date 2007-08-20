@@ -4,6 +4,7 @@
 #define _IMAGE_HH
 
 #include <map>
+#include <set>
 
 #include "types.hh"
 
@@ -30,8 +31,8 @@ typedef struct {
 } image_mapping_t;
 
 typedef struct {
-	list<image_mapping_t *> *mapping_list;
-	map<arm_addr_t, annot_t *> *annot_map;
+	map<arm_addr_t, image_mapping_t *> mappings;
+	map<arm_addr_t, annot_t *> annot_map;
 } image_t;
 
 

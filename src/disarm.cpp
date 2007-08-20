@@ -9,8 +9,8 @@
 
 #include <iostream>
 #include <iomanip>
-#include <list>
 #include <map>
+#include <set>
 
 #include "arm.hh"
 #include "basicblock.hh"
@@ -26,14 +26,6 @@ using namespace std;
 #define BLOCK_SEPARATOR  \
   "; --------------------------------------------------------------------"
 
-
-static int
-entry_point_add(list<arm_addr_t> *ep_list, arm_addr_t addr)
-{
-	ep_list->push_front(addr);
-
-	return 0;
-}
 
 static void
 print_code_references(basic_block_t *bb, map<arm_addr_t, char *> *sym_map)
@@ -66,6 +58,41 @@ print_code_references(basic_block_t *bb, map<arm_addr_t, char *> *sym_map)
 		cout << sourcestr << "(" << (ref->cond ? "C" : "U") << ")"
 		     << (ref->link ? "L" :
 			 ((bb->addr > ref->source) ? "F" : "B"));
+		coderefs_printed += 1;
+
+		free(sourcestr);
+
+		coderefs_iter++;
+	}
+	if (coderefs_printed > 0) cout << endl;
+
+
+	/* testing... */
+	coderefs_printed = 0;
+	coderefs_iter = bb->c.out_refs.begin();
+	while (coderefs_iter != bb->c.out_refs.end()) {
+		ref_code_t *ref = coderefs_iter->second;
+
+		if (ref->remove) {
+			delete ref;
+			coderefs_iter++;
+			continue;
+		}
+
+		if (coderefs_printed == 0) {
+			cout << "; code reference to ";
+		} else if (coderefs_printed % 4 == 0) {
+			cout << "," << endl << ";\t\t ";
+		} else {
+			cout << ", ";
+		}
+
+		char *sourcestr = arm_addr_string(ref->target, sym_map);
+		if (sourcestr == NULL) abort();
+
+		cout << sourcestr << "(" << (ref->cond ? "C" : "U") << ")"
+		     << (ref->link ? "L" :
+			 ((bb->addr < ref->target) ? "F" : "B"));
 		coderefs_printed += 1;
 
 		free(sourcestr);
@@ -224,8 +251,8 @@ print_basic_block_code(basic_block_t *bb, image_t *image,
 	annot_t *annot = NULL;
 	arm_addr_t annot_addr;
 	map<arm_addr_t, annot_t *>::iterator annot_iter;
-	annot_iter = image->annot_map->lower_bound(bb->addr);
-	if (annot_iter != image->annot_map->end()) {
+	annot_iter = image->annot_map.lower_bound(bb->addr);
+	if (annot_iter != image->annot_map.end()) {
 		annot_addr = annot_iter->first;
 		annot = annot_iter->second;
 	}
@@ -302,13 +329,14 @@ print_basic_block_code(basic_block_t *bb, image_t *image,
 
 		/* clean up annotations */
 		if (annot != NULL && annot_addr == addr) {
-			image->annot_map->erase(annot_iter);
+			map<arm_addr_t, annot_t *>::iterator annot_erase;
+			annot_erase = annot_iter++;
+			image->annot_map.erase(annot_erase);
 			delete annot;
 
-			annot_iter++;
-			if (annot_iter != image->annot_map->end()) {
+			if (annot_iter != image->annot_map.end()) {
 				annot = annot_iter->second;
-				image->annot_map->erase(annot_iter);
+				image->annot_map.erase(annot_iter);
 			} else {
 				annot = NULL;
 			}
@@ -447,14 +475,10 @@ main(int argc, char *argv[])
 	}
 
 	/* add arm entry points */
-	list<arm_addr_t> ep_list;
+	set<arm_addr_t> ep_set;
 	for (arm_addr_t i = 0; i < 0x20; i += 4) {
 		if (i == 0x14) continue;
-		r = entry_point_add(&ep_list, i);
-		if (r < 0) {
-			perror("entry_point_add");
-			exit(EXIT_FAILURE);
-		}
+		ep_set.insert(i);
 	}
 
 	/* load symbols */
@@ -507,11 +531,7 @@ main(int argc, char *argv[])
 					return -1;
 				}
 
-				r = entry_point_add(&ep_list, addr);
-				if (r < 0) {
-					perror("entry_point_add");
-					exit(EXIT_FAILURE);
-				}
+				ep_set.insert(addr);
 			}
 		}
 
@@ -520,7 +540,7 @@ main(int argc, char *argv[])
 
 	/* basic block analysis */
 	map<arm_addr_t, basic_block_t *> bb_map;
-	r = basicblock_analysis(&bb_map, &ep_list, image);
+	r = basicblock_analysis(&bb_map, &ep_set, image);
 	if (r < 0) {
 		cerr << "Unable to finish basic block analysis." << endl;
 		exit(EXIT_FAILURE);

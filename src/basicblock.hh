@@ -3,7 +3,6 @@
 #ifndef _BASICBLOCK_HH
 #define _BASICBLOCK_HH
 
-#include <list>
 #include <set>
 #include <map>
 
@@ -63,7 +62,7 @@ struct basic_block {
 
 
 int basicblock_analysis(map<arm_addr_t, basic_block_t *> *bb_map,
-			list<arm_addr_t> *entrypoints, image_t *image);
+			set<arm_addr_t> *entrypoints, image_t *image);
 
 
 #endif /* ! _BASICBLOCK_HH */

@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include <algorithm>
 #include <iostream>
 #include <list>
 #include <map>
@@ -56,6 +57,8 @@ static void
 mark_bb_data(basic_block_t *bb_source)
 {
 	stack<basic_block_t *> stack;
+
+	if (bb_source->type != BASIC_BLOCK_TYPE_UNKNOWN) return;
 
 	stack.push(bb_source);
 
@@ -113,6 +116,8 @@ mark_bb_code(basic_block_t *bb_source)
 {
 	stack<basic_block_t *> stack;
 
+	if (bb_source->type != BASIC_BLOCK_TYPE_UNKNOWN) return;
+
 	stack.push(bb_source);
 
 	while (!stack.empty()) {
@@ -139,9 +144,7 @@ mark_bb_code(basic_block_t *bb_source)
 		for (data_iter = bb->c.data_refs.begin();
 		     data_iter != bb->c.data_refs.end(); data_iter++) {
 			basic_block_t *bb_ref = data_iter->first;
-			if (bb_ref->type == BASIC_BLOCK_TYPE_UNKNOWN) {
-				mark_bb_data(bb_ref);
-			}
+			mark_bb_data(bb_ref);
 		}
 
 		/* add outgoing blocks to stack */
@@ -434,19 +437,17 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 			arm_instr_get_instr_pattern(instr);
 		if (ip == NULL) continue;
 
-		int cond;
-		bool check_fall_through = false;
+		bool do_fall_through = false;
+		bool cond_fall_through = false;
 
 		if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK) {
-			cond = arm_instr_get_param(instr, ip, 0);
+			int cond = arm_instr_get_param(instr, ip, 0);
 			int link = arm_instr_get_param(instr, ip, 1);
 			int offset = arm_instr_get_param(instr, ip, 2);
 			int target = arm_instr_branch_target(offset, addr);
 
-			/* also add fall through ref on link */
-			if (link) {
-				check_fall_through = true;
-			}
+			do_fall_through = (link || cond != ARM_COND_AL);
+			cond_fall_through = (!link || cond != ARM_COND_AL);
 
 			/* target reference */
 			r = reference_code_add(bb_map, bb, addr, target,
@@ -454,7 +455,7 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 			if (r < 0) return -1;
 			else if (r == 1) break;
 		} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM_SHIFT) {
-			int opcode, s, rn, rd, sha, sh, rm;
+			int cond, opcode, s, rn, rd, sha, sh, rm;
 			r = arm_instr_get_params(instr, ip, 8, &cond,
 						   &opcode, &s, &rn, &rd,
 						   &sha, &sh, &rm);
@@ -482,13 +483,15 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 					}
 					if (r == 1) break;
 
-					check_fall_through = true;
+					do_fall_through = true;
+					cond_fall_through = true;
 				}
 			} else if (cond == ARM_COND_AL &&
 				   opcode == ARM_DATA_OPCODE_MOV &&
 				   rd == 15 && sh == ARM_DATA_SHIFT_LSL &&
 				   sha == 0) {
 				/* could be a link */
+				/*
 				arm_addr_t r14_data;
 				r = block_backtrack_reg_add_pc(bb, addr, 14,
 							       image,
@@ -501,14 +504,20 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 					if (r < 0) return -1;
 					else if (r == 1) break;
 				}
-				check_fall_through = true;
+				*/
+				do_fall_through = (cond != ARM_COND_AL);
+				cond_fall_through = (cond != ARM_COND_AL);
 			} else if ((opcode < ARM_DATA_OPCODE_TST &&
 				    opcode > ARM_DATA_OPCODE_CMN) &&
 				   rd == 15) {
-				check_fall_through = true;
+				do_fall_through = (cond != ARM_COND_AL);
+				cond_fall_through = (cond != ARM_COND_AL);
+			} else {
+				do_fall_through = true;
+				cond_fall_through = (cond != ARM_COND_AL);
 			}
 		} else if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
-			int p, u, b, w, load, rn, rd, imm;
+			int cond, p, u, b, w, load, rn, rd, imm;
 			r = arm_instr_get_params(instr, ip, 9, &cond, &p, &u,
 						 &b, &w, &load, &rn, &rd,
 						 &imm);
@@ -542,30 +551,35 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 						else if (r == 1) break;
 					}
 				}
-
-				check_fall_through = true;
+				do_fall_through = (cond != ARM_COND_AL);
+			} else {
+				do_fall_through = true;
 			}
+			cond_fall_through = (cond != ARM_COND_AL);
 		} else {
-			arm_cond_t c;
-			r = arm_instr_get_cond(instr, &c);
-			if (r < 0) c = ARM_COND_AL;
-			cond = static_cast<int>(c);
+			arm_cond_t cond;
+			r = arm_instr_get_cond(instr, &cond);
+			if (r < 0) cond = ARM_COND_AL;
 
 			/* r15 is changed */
 			r = arm_instr_is_reg_changed(instr, 15);
 			if (r < 0) return -1;
 			else if (r) {
-				check_fall_through = true;;
+				do_fall_through = (cond != ARM_COND_AL);
+				cond_fall_through = (cond != ARM_COND_AL);
+			} else {
+				do_fall_through = true;
+				cond_fall_through = false;
 			}
 		}
 
 		/* check fall-through reference */
-		if (check_fall_through && (cond != ARM_COND_AL) &&
+		if (do_fall_through &&
 		    addr == (bb->addr + bb->size - sizeof(arm_instr_t))) {
 			/* last instruction in block */
 			r = reference_code_add(bb_map, bb, addr,
 					       addr + sizeof(arm_instr_t),
-					       true, false);
+					       cond_fall_through, false);
 			if (r < 0) return -1;
 			else if (r == 1) break;
 		}
@@ -621,10 +635,10 @@ bb_pass_merge(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 
 static int
 bb_pass_codetree(map<arm_addr_t, basic_block_t *> *bb_map,
-		 list<arm_addr_t> *entrypoints)
+		 set<arm_addr_t> *entrypoints)
 {
 	/* entrypoints */
-	list<arm_addr_t>::iterator entrypoint_iter;
+	set<arm_addr_t>::iterator entrypoint_iter;
 	for (entrypoint_iter = entrypoints->begin();
 	     entrypoint_iter != entrypoints->end(); entrypoint_iter++) {
 		mark_bb_code((*bb_map)[*entrypoint_iter]);
@@ -635,12 +649,12 @@ bb_pass_codetree(map<arm_addr_t, basic_block_t *> *bb_map,
 
 int
 basicblock_analysis(map<arm_addr_t, basic_block_t *> *bb_map,
-		    list<arm_addr_t> *entrypoints, image_t *image)
+		    set<arm_addr_t> *entrypoints, image_t *image)
 {
 	int r;
 
 	/* add entrypoints */
-	list<arm_addr_t>::iterator entrypoint_iter;
+	set<arm_addr_t>::iterator entrypoint_iter;
 	for (entrypoint_iter = entrypoints->begin();
 	     entrypoint_iter != entrypoints->end(); entrypoint_iter++) {
 		basicblock_add(bb_map, (*entrypoint_iter), image);

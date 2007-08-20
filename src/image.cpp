@@ -21,25 +21,13 @@
 
 using namespace std;
 
+
 image_t *
 image_new()
 {
 	image_t *image = new image_t;
 	if (image == NULL) {
 		errno = ENOMEM;
-		return NULL;
-	}
-
-	image->mapping_list = new list<image_mapping_t *>();
-	if (image->mapping_list == NULL) {
-		delete image;
-		return NULL;
-	}
-
-	image->annot_map = new map<arm_addr_t, annot_t *>();
-	if (image->annot_map == NULL) {
-		delete image->mapping_list;
-		delete image;
 		return NULL;
 	}
 
@@ -57,14 +45,14 @@ image_free_mapping(image_mapping_t *mapping)
 void
 image_free(image_t *image)
 {
-	while (!image->mapping_list->empty()) {
-		image_mapping_t *mapping = image->mapping_list->front();
-		image->mapping_list->pop_front();
-		image_free_mapping(mapping);
-	}
+	map<arm_addr_t, image_mapping_t *>::iterator mapping_iter;
 
-	delete image->mapping_list;
-	delete image->annot_map;
+	mapping_iter = image->mappings.begin();
+	while (mapping_iter != image->mappings.end()) {
+		image_mapping_t *mapping = (mapping_iter++)->second;
+		image_free_mapping(mapping);
+		image->mappings.erase(mapping_iter);
+	}
 }
 
 int
@@ -132,12 +120,7 @@ image_create_mapping(image_t *image, arm_addr_t addr, uint_t size,
 	mapping->write = write;
 	mapping->big_endian = big_endian;
 
-	list<image_mapping_t *>::iterator mapping_iter;
-	for (mapping_iter = image->mapping_list->begin();
-	     mapping_iter != image->mapping_list->end(); mapping_iter++) {
-		if ((*mapping_iter)->addr > mapping->addr) break;
-	}
-	image->mapping_list->insert(mapping_iter, mapping);
+	image->mappings[mapping->addr] = mapping;
 
 	return 0;
 }
@@ -145,33 +128,28 @@ image_create_mapping(image_t *image, arm_addr_t addr, uint_t size,
 void
 image_remove_mapping(image_t *image, arm_addr_t addr)
 {
-	list<image_mapping_t *>::iterator mapping_iter;
-	for (mapping_iter = image->mapping_list->begin();
-	     mapping_iter != image->mapping_list->end(); mapping_iter++) {
-		if ((*mapping_iter)->addr == addr) break;
-	}
-	image->mapping_list->erase(mapping_iter);
+	map<arm_addr_t, image_mapping_t *>::iterator mapping_iter;
 
-	image_mapping_t *mapping = *mapping_iter;
-	image_free_mapping(mapping);
+	mapping_iter = image->mappings.lower_bound(addr);
+	if (mapping_iter != image->mappings.begin()) {
+		image_mapping_t *mapping = (--mapping_iter)->second;
+		image_free_mapping(mapping);
+		image->mappings.erase(mapping_iter);
+	}
 }
 
 static image_mapping_t *
 image_find_mapping(image_t *image, arm_addr_t addr)
 {
-	image_mapping_t *mapping = NULL;
+	map<arm_addr_t, image_mapping_t *>::iterator mapping_iter;
 
-	list<image_mapping_t *>::iterator mapping_iter;
-	for (mapping_iter = image->mapping_list->begin();
-	     mapping_iter != image->mapping_list->end(); mapping_iter++) {
-		image_mapping_t *m = *mapping_iter;
-		if (addr >= m->addr && addr < (m->addr + m->size)) {
-			mapping = m;
-			break;
-		}
-	}
+	mapping_iter = image->mappings.lower_bound(addr);
+	if (mapping_iter != image->mappings.begin()) {
+		image_mapping_t *mapping = (--mapping_iter)->second;
+		return mapping;
+	}	
 
-	return mapping;
+	return NULL;
 }
 
 bool
@@ -261,9 +239,9 @@ image_add_annot(image_t *image, arm_addr_t addr,
 {
 	int r;
 	map<arm_addr_t, annot_t *>::iterator annot_pos =
-		image->annot_map->find(addr);
+		image->annot_map.find(addr);
 
-	if (annot_pos == image->annot_map->end()) {
+	if (annot_pos == image->annot_map.end()) {
 		annot_t *annot = new annot_t;
 		if (annot == NULL) {
 			errno = ENOMEM;
@@ -282,9 +260,9 @@ image_add_annot(image_t *image, arm_addr_t addr,
 			annot->post_textlen = textlen;
 		}
 
-		(*image->annot_map)[addr] = annot;
+		image->annot_map[addr] = annot;
 	} else {
-		annot_t *annot = (*annot_pos).second;
+		annot_t *annot = annot_pos->second;
 		char **annot_text;
 		size_t *annot_textlen;
 
