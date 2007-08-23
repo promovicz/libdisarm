@@ -1,0 +1,4 @@
+Use the following steps to compile disarm:
+1) ./bootstrap
+2) ./configure
+3) make
