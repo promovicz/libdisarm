@@ -7,8 +7,9 @@
 
 
 typedef unsigned int uint_t;
-typedef uint32_t arm_instr_t;
-typedef uint_t arm_addr_t;
+typedef uint32_t arm_word_t;
+typedef arm_word_t arm_addr_t;
+typedef arm_word_t arm_instr_t;
 
 
 #endif /* ! _TYPES_H */

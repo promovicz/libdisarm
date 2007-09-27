@@ -8,8 +8,6 @@
 
 #include "types.hh"
 
-using namespace std;
-
 
 typedef struct {
 	char *pre_text;
@@ -31,8 +29,8 @@ typedef struct {
 } image_mapping_t;
 
 typedef struct {
-	map<arm_addr_t, image_mapping_t *> mappings;
-	map<arm_addr_t, annot_t *> annot_map;
+	std::map<arm_addr_t, image_mapping_t *> mappings;
+	std::map<arm_addr_t, annot_t *> annot_map;
 } image_t;
 
 

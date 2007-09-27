@@ -8,10 +8,8 @@
 #include "image.hh"
 #include "types.hh"
 
-using namespace std;
 
-
-int codesep_analysis(list<arm_addr_t> *ep_list, image_t *image,
+int codesep_analysis(std::list<arm_addr_t> *ep_list, image_t *image,
 		     uint8_t **code_bitmap, FILE *f);
 
 

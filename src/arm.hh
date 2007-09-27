@@ -9,8 +9,6 @@
 #include "types.hh"
 #include "image.hh"
 
-using namespace std;
-
 
 typedef enum {
 	ARM_INSTR_TYPE_NONE = 0,
@@ -117,7 +115,6 @@ typedef struct {
 } arm_instr_pattern_t;
 
 
-
 typedef enum {
 	ARM_COND_EQ = 0, ARM_COND_NE,
 	ARM_COND_CS,     ARM_COND_CC,
@@ -130,7 +127,7 @@ typedef enum {
 	ARM_COND_MAX
 } arm_cond_t;
 
-static const char *cond_map[] = {
+static const char *arm_cond_map[] = {
 	"eq", "ne", "cs", "cc", "mi", "pl", "vs", "vc",
 	"hi", "ls", "ge", "lt", "gt", "le", "al", "nv"
 };
@@ -142,7 +139,7 @@ typedef enum {
 	ARM_DATA_SHIFT_MAX
 } arm_data_shift_t;
 
-static const char *data_shift_map[] = {
+static const char *arm_data_shift_map[] = {
 	"lsl", "lsr", "asr", "ror"
 };
 
@@ -190,6 +187,24 @@ static const char *arm_reg_map[] = {
 
 
 typedef enum {
+	ARM_CPREG_CR0 = 0, ARM_CPREG_CR1,
+	ARM_CPREG_CR2,     ARM_CPREG_CR3,
+	ARM_CPREG_CR4,     ARM_CPREG_CR5,
+	ARM_CPREG_CR6,     ARM_CPREG_CR7,
+	ARM_CPREG_CR8,     ARM_CPREG_CR9,
+	ARM_CPREG_CR10,    ARM_CPREG_CR11,
+	ARM_CPREG_CR12,    ARM_CPREG_CR13,
+	ARM_CPREG_CR14,    ARM_CPREG_CR15,
+	ARM_CPREG_MAX
+} arm_cpreg_t;
+
+static const char *arm_cpreg_map[] = {
+	"cr0", "cr1", "cr2", "cr3", "cr4", "cr5", "cr6", "cr7",
+	"cr8", "cr9", "cr10", "cr11", "cr12", "cr13", "cr14", "cr15"
+};
+
+
+typedef enum {
 	ARM_FLAG_N = 0, ARM_FLAG_Z,
 	ARM_FLAG_C,     ARM_FLAG_V,
 	ARM_FLAG_MAX
@@ -210,7 +225,8 @@ uint_t arm_instr_get_param(arm_instr_t instr,
 int arm_instr_get_params(arm_instr_t instr, const arm_instr_pattern_t *ip,
 			 uint_t params, ...);
 int arm_instr_get_cond(arm_instr_t instr, arm_cond_t *cond);
-int arm_instr_is_unpredictable(arm_instr_t instr, bool *unpredictable);
+int arm_instr_is_unpredictable(arm_instr_t instr, arm_addr_t addr,
+			       bool *unpredictable);
 arm_addr_t arm_instr_branch_target(int offset, arm_addr_t address);
 int arm_instr_is_reg_used(arm_instr_t instr, uint_t reg);
 int arm_instr_is_reg_changed(arm_instr_t instr, uint_t reg);
@@ -225,8 +241,8 @@ int arm_instr_changed_flags(arm_instr_t instr, uint_t *flags);
 void arm_reglist_fprint(FILE *f, uint_t reglist);
 void arm_flaglist_fprint(FILE *f, uint_t flaglist);
 void arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
-		      map<arm_addr_t, char *> *sym_map, image_t *image);
-char *arm_addr_string(arm_addr_t addr, map<arm_addr_t, char *> *sym_map);
+		      std::map<arm_addr_t, char *> *sym_map, image_t *image);
+char *arm_addr_string(arm_addr_t addr, std::map<arm_addr_t, char *> *sym_map);
 
 
 #endif /* ! _ARM_HH */

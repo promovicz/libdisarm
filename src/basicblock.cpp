@@ -424,7 +424,7 @@ block_pass_third(basic_block_t *bb, map<arm_addr_t, basic_block_t *> *bb_map,
 
 		/* code/data analysis */
 		bool unpredictable;
-		r = arm_instr_is_unpredictable(instr, &unpredictable);
+		r = arm_instr_is_unpredictable(instr, addr, &unpredictable);
 		if (r < 0) return -1;
 
 		if (unpredictable) {
@@ -611,6 +611,11 @@ bb_pass_merge(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 {
 	int r;
 
+	uint_t bb_unknown = 0;
+	uint_t bb_data = 0;
+	uint_t bb_data_blocks = 0;
+	uint_t bb_code = 0;
+
 	map<arm_addr_t, basic_block_t *>::iterator bb_iter, bb_save;
 	bb_iter = bb_map->begin();
 	if (bb_iter != bb_map->end()) {
@@ -619,16 +624,45 @@ bb_pass_merge(map<arm_addr_t, basic_block_t *> *bb_map, image_t *image)
 			bb_save = bb_iter++;
 			basic_block_t *bb = bb_save->second;
 
+			/* remove unused */
+			if (!image_is_addr_mapped(image, bb->addr)) {
+				delete bb;
+				bb_map->erase(bb_save);
+				continue;
+			}
+
+			/* stats */
+			switch (bb->type) {
+			case BASIC_BLOCK_TYPE_UNKNOWN:
+				bb_unknown += bb->size;
+				break;
+			case BASIC_BLOCK_TYPE_DATA:
+				bb_data += bb->size;
+				bb_data_blocks += 1;
+				break;
+			case BASIC_BLOCK_TYPE_CODE:
+				bb_code += bb->size;
+				break;
+			}
+
+			/* merge */
 			if (bb_prev->type == BASIC_BLOCK_TYPE_DATA &&
 			    bb->type == BASIC_BLOCK_TYPE_DATA) {
 				/* merge data blocks */
 				data_block_merge(bb_prev, bb);
 				bb_map->erase(bb_save);
+				bb_data_blocks -= 1;
 			} else {
 				bb_prev = bb;
 			}
 		}
 	}
+
+	cout << "Unknown: " << bb_unknown << " b\n"
+	     << "Code: " << bb_code << " b\n"
+	     << "Data: " << bb_data << " b / "
+	     << bb_data_blocks << " blocks = "
+	     << (bb_data / bb_data_blocks) << " b/block" << endl;
 
 	return 0;
 }
