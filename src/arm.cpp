@@ -10,6 +10,7 @@
 #include <cassert>
 
 #include <map>
+#include <iostream>
 
 #include "arm.hh"
 #include "image.hh"
@@ -553,7 +554,8 @@ arm_instr_get_type(arm_instr_t instr, arm_instr_type_t *type)
 }
 
 int
-arm_instr_is_unpredictable(arm_instr_t instr, bool *unpredictable)
+arm_instr_is_unpredictable(arm_instr_t instr, arm_addr_t addr,
+			   bool *unpredictable)
 {
 	const arm_instr_pattern_t *ip =
 		arm_instr_get_instr_pattern(instr);
@@ -583,7 +585,6 @@ arm_instr_is_unpredictable(arm_instr_t instr, bool *unpredictable)
 	}
 
 	return 0;
-
 }
 
 arm_addr_t
@@ -1204,7 +1205,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "%s%s%s\t", data_opcode_map[opcode],
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			((s && (opcode < ARM_DATA_OPCODE_TST ||
 				opcode > ARM_DATA_OPCODE_CMN)) ? "s" : ""));
 
@@ -1224,7 +1225,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		}
 
 		if (sha > 0) {
-			fprintf(f, ", %s #%s%x", data_shift_map[sh],
+			fprintf(f, ", %s #%s%x", arm_data_shift_map[sh],
 				(sha < 10 ? "" : "0x"), sha);
 		} else if (sh == ARM_DATA_SHIFT_ROR) {
 			fprintf(f, ", rrx");
@@ -1236,7 +1237,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "%s%s%s\t", data_opcode_map[opcode],
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			((s && (opcode < ARM_DATA_OPCODE_TST ||
 				opcode > ARM_DATA_OPCODE_CMN)) ? "s" : ""));
 
@@ -1250,7 +1251,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 			fprintf(f, "r%d, r%d, r%d", rd, rn, rm);
 		}
 
-		fprintf(f, ", %s r%d", data_shift_map[sh], rs);
+		fprintf(f, ", %s r%d", arm_data_shift_map[sh], rs);
 	} else if (ip->type == ARM_INSTR_TYPE_DATA_IMM) {
 		int cond, opcode, s, rn, rd, rot, imm;
 		ret = arm_instr_get_params(instr, ip, 7, &cond, &opcode, &s,
@@ -1258,7 +1259,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "%s%s%s\t", data_opcode_map[opcode],
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			((s && (opcode < ARM_DATA_OPCODE_TST ||
 				opcode > ARM_DATA_OPCODE_CMN)) ? "s" : ""));
 
@@ -1308,7 +1309,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "swi%s\t0x%x",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			imm);
 	} else if (ip->type == ARM_INSTR_TYPE_CLZ) {
 		int cond, rd, rm;
@@ -1316,7 +1317,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "clz%s\t, r%d, r%m",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""), rd, rm);
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
+			rd, rm);
 	} else if (ip->type == ARM_INSTR_TYPE_MOVE_IMM_STATUS) {
 		int cond, r, mask, rot, imm;
 		ret = arm_instr_get_params(instr, ip, 5, &cond, &r, &mask,
@@ -1324,7 +1326,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "msr%s\t%s_%s%s%s%s",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(r ? "SPSR" : "CPSR"), ((mask & 1) ? "c" : ""),
 			((mask & 2) ? "x" : ""), ((mask & 4) ? "s" : ""),
 			((mask & 8) ? "f" : ""));
@@ -1340,7 +1342,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "msr%s\t%s_%s%s%s%s",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(r ? "SPSR" : "CPSR"), ((mask & 1) ? "c" : ""),
 			((mask & 2) ? "x" : ""), ((mask & 4) ? "s" : ""),
 			((mask & 8) ? "f" : ""));
@@ -1352,7 +1354,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "mrs%s\tr%d, %s",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			rd, (r ? "SPSR" : "CPSR"));
 	} else if (ip->type == ARM_INSTR_TYPE_LS_IMM_OFF) {
 		int cond, p, u, b, w, load, rn, rd, imm;
@@ -1362,7 +1364,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		fprintf(f, "%sr%s%s%s\tr%d, [r%d",
 			(load ? "ld" : "st"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(b ? "b" : ""), ((!p && w) ? "t" : ""), rd, rn);
 
 		if (!p) fprintf(f, "]");
@@ -1408,7 +1410,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		fprintf(f, "%sr%s%s%s\tr%d, [r%d",
 			(load ? "ld" : "st"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(b ? "b" : ""), ((!p && w) ? "t" : ""), rd, rn);
 
 		if (!p) fprintf(f, "]");
@@ -1421,7 +1423,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		}
 
 		if (sha > 0) {
-			fprintf(f, ", %s #%s%x", data_shift_map[sh],
+			fprintf(f, ", %s #%s%x", arm_data_shift_map[sh],
 				(sha < 10 ? "" : "0x"), sha);
 		} else if (sh == ARM_DATA_SHIFT_ROR) {
 			fprintf(f, ", rrx");
@@ -1441,7 +1443,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		fprintf(f, "b%s%s\t%s",
 			(link ? "l" : ""),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			targetstr);
 
 		delete targetstr;
@@ -1471,14 +1473,14 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "bx%s\tr%d",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""), rm);
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""), rm);
 	} else if (ip->type == ARM_INSTR_TYPE_BRANCH_LINK_XCHG) {
 		int cond, rm;
 		ret = arm_instr_get_params(instr, ip, 2, &cond, &rm);
 		if (ret < 0) abort();
 
 		fprintf(f, "blx%s\tr%d",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""), rm);
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""), rm);
 	} else if (ip->type == ARM_INSTR_TYPE_CP_DATA) {
 		int cond, opcode_1, crn, crd, cp_num, opcode_2, crm;
 		ret = arm_instr_get_params(instr, ip, 7, &cond, &opcode_1,
@@ -1488,7 +1490,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		fprintf(f, "cdp%s\tp%d, %d, cr%d, cr%d, cr%d, %d",
 			(cond != ARM_COND_NV ?
-			 (cond != ARM_COND_AL ? cond_map[cond] : "") : "2"),
+			 (cond != ARM_COND_AL ?
+			  arm_cond_map[cond] : "") : "2"),
 			cp_num, opcode_1, crd, crn, crm, opcode_2);
 	} else if (ip->type == ARM_INSTR_TYPE_CP_LS) {
 		int cond, p, u, n, w, load, rn, crd, cp_num, offset;
@@ -1500,8 +1503,9 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		fprintf(f, "%sc%s%s\tp%d, cr%d, [r%d",
 			(load ? "ld" : "st"),
 			(cond != ARM_COND_NV ?
-			 (cond != ARM_COND_AL ? cond_map[cond] : "") : "2"),
-			(n ? "l" : ""), cp_num, crd, rn);
+			 (cond != ARM_COND_AL ?
+			  arm_cond_map[cond] : "") : "2"), (n ? "l" : ""),
+			cp_num, crd, rn);
 
 		if (!p) fprintf(f, "]");
 
@@ -1523,8 +1527,9 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		fprintf(f, "m%s%s\tp%d, %d, r%d, cr%d, cr%d, %d",
 			(load ? "rc" : "cr"),
 			(cond != ARM_COND_NV ?
-			 (cond != ARM_COND_AL ? cond_map[cond] : "") : "2"),
-			cp_num, opcode_1, rd, crn, crm, opcode_2);
+			 (cond != ARM_COND_AL ?
+			  arm_cond_map[cond] : "") : "2"), cp_num, opcode_1,
+			rd, crn, crm, opcode_2);
 	} else if (ip->type == ARM_INSTR_TYPE_LS_MULTI) {
 		int cond, p, u, s, w, load, rn, reglist;
 		ret = arm_instr_get_params(instr, ip, 8, &cond, &p, &u, &s, &w,
@@ -1532,7 +1537,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "%sm%s%s%s\tr%d%s, {", (load ? "ld" : "st"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(u ? "i" : "d"), (p ? "b" : "a"),
 			rn, (w ? "!" : ""));
 
@@ -1546,7 +1551,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "m%s%s%s\tr%d, r%d, r%d", (a ? "la" : "ul"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(s ? "s" : ""), rd, rm, rs);
 
 		if (a) fprintf(f, ", r%d", rn);
@@ -1558,7 +1563,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		fprintf(f, "%sm%sl%s%s\tr%d, r%d, r%d, r%d",
 			(u ? "s" : "u"), (a ? "la" : "ul"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(s ? "s" : ""), rdlo, rdhi, rm, rs);
 	} else if (ip->type == ARM_INSTR_TYPE_SWAP) {
 		int cond, b, rn, rd, rm;
@@ -1567,7 +1572,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "swp%s%s\tr%d, r%d, [r%d]",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(b ? "b" : ""), rd, rm, rn);
 	} else if (ip->type == ARM_INSTR_TYPE_LS_HWORD_REG_OFF) {
 		int cond, p, u, w, load, rn, rd, rm;
@@ -1576,7 +1581,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "%sr%sh\tr%d, [r%d", (load ? "ld" : "st"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""), rd, rn);
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
+			rd, rn);
 
 		if (!p) fprintf(f, "]");
 
@@ -1590,7 +1596,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "%sr%sh\tr%d, [r%d", (load ? "ld" : "st"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""), rd, rn);
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
+			rd, rn);
 
 		if (!p) fprintf(f, "]");
 
@@ -1627,7 +1634,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "%sr%sd\tr%d, [r%d", (store ? "st" : "ld"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			rd, rn);
 
 		if (!p) fprintf(f, "]");
@@ -1642,7 +1649,8 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "%sr%sd\tr%d, [r%d", (store ? "st" : "ld"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""), rd, rn);
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
+			rd, rn);
 
 		if (!p) fprintf(f, "]");
 
@@ -1670,7 +1678,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "ldr%ss%s\tr%d, [r%d",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(h ? "h" : "b"), rd, rn);
 
 		if (!p) fprintf(f, "]");
@@ -1685,7 +1693,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		if (ret < 0) abort();
 
 		fprintf(f, "ldr%ss%s\tr%d, [r%d",
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			(h ? "h" : "b"), rd, rn);
 
 		if (!p) fprintf(f, "]");
@@ -1715,7 +1723,7 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 
 		fprintf(f, "q%s%s%s\tr%d, r%d, r%d", ((op & 2) ? "d" : ""),
 			((op & 1) ? "sub" : "add"),
-			(cond != ARM_COND_AL ? cond_map[cond] : ""),
+			(cond != ARM_COND_AL ? arm_cond_map[cond] : ""),
 			rd, rm, rn);
 	} else if (ip->type == ARM_INSTR_TYPE_DSP_MUL) {
 		int cond, op, rd, rn, rs, y, x, rm;
@@ -1727,26 +1735,27 @@ arm_instr_fprint(FILE *f, arm_instr_t instr, arm_addr_t addr,
 		case 0:
 			fprintf(f, "smla%s%s%s\tr%d, r%d, r%d, r%d",
 				(x ? "t" : "b"), (y ? "t" : "b"),
-				(cond != ARM_COND_AL ? cond_map[cond] : ""),
-				rd, rm, rs, rn);
+				(cond != ARM_COND_AL ?
+				 arm_cond_map[cond] : ""), rd, rm, rs, rn);
 			break;
 		case 1:
 			fprintf(f, "s%sw%s%s\tr%d, r%d, r%d",
 				(x ? "mul" : "mla"), (y ? "t" : "b"),
-				(cond != ARM_COND_AL ? cond_map[cond] : ""));
+				(cond != ARM_COND_AL ?
+				 arm_cond_map[cond] : ""));
 			if (!x) fprintf(f, ", r%d", rn);
 			break;
 		case 2:
 			fprintf(f, "smlal%s%s%s\tr%d, r%d, r%d, r%d",
 				(x ? "t" : "b"), (y ? "t" : "b"),
-				(cond != ARM_COND_AL ? cond_map[cond] : ""),
-				rn, rd, rm, rs);
+				(cond != ARM_COND_AL ?
+				 arm_cond_map[cond] : ""), rn, rd, rm, rs);
 			break;
 		case 3:
 			fprintf(f, "smul%s%s%s\tr%d, r%d, r%d",
 				(x ? "t" : "b"), (y ? "t" : "b"),
-				(cond != ARM_COND_AL ? cond_map[cond] : ""),
-				rd, rm, rs);
+				(cond != ARM_COND_AL ?
+				 arm_cond_map[cond] : ""), rd, rm, rs);
 			break;
 		default:
 			abort();

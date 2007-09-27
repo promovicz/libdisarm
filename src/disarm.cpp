@@ -538,6 +538,49 @@ main(int argc, char *argv[])
 		if (text) delete text;
 	}
 
+	/* find strings */
+#if 0
+	arm_addr_t addr = 0;
+	uint_t string_len = 0;
+	while (1) {
+		uint8_t data;
+		r = image_read_byte(image, addr, &data);
+		if (r == 0) break;
+		else if (r < 0) {
+			perror("image_read_byte");
+			exit(EXIT_FAILURE);
+		}
+
+		if (data >= 32 && data <= 126) {
+			string_len += 1;
+			addr += 1;
+			continue;
+		}
+
+		if ((data == '\0' && string_len >= 3) ||
+		    string_len >= 6) {
+			if (data == '\0') cout << "asciz: ";
+			else cout << "ascii: ";
+
+			char *str = new char[string_len];
+			r = image_read(image, addr - string_len,
+				       str, string_len);
+			if (r <= 0) {
+				perror("image_read_byte");
+				exit(EXIT_FAILURE);
+			}
+			cout << hex << setw(8) << setfill('0')
+			     << addr - string_len;
+			printf("  `%.*s'\n", string_len, str);
+			delete str;
+		}
+
+		string_len = 0;
+
+		addr += 1;
+	}
+#endif
+
 	/* basic block analysis */
 	map<arm_addr_t, basic_block_t *> bb_map;
 	r = basicblock_analysis(&bb_map, &ep_set, image);
@@ -545,7 +588,6 @@ main(int argc, char *argv[])
 		cerr << "Unable to finish basic block analysis." << endl;
 		exit(EXIT_FAILURE);
 	}
-
 
 	/* print instructions */
 	map<arm_addr_t, basic_block_t *>::iterator bb_iter;
@@ -575,7 +617,7 @@ main(int argc, char *argv[])
 	uint_t syms_cleaned = 0;
 	for (map<arm_addr_t, char *>::iterator sym_iter = sym_map.begin();
 	     sym_iter != sym_map.end(); sym_iter++) {
-		char *sym_name = (*sym_iter).second;
+		char *sym_name = sym_iter->second;
 		free(sym_name);
 		syms_cleaned += 1;
 	}

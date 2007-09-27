@@ -9,8 +9,6 @@
 #include "image.hh"
 #include "types.hh"
 
-using namespace std;
-
 
 typedef struct {
 	bool remove;
@@ -36,13 +34,13 @@ typedef struct {
 } bb_cmp_t;
 
 typedef struct {
-	map<basic_block_t *, ref_code_t *, bb_cmp_t> in_refs;
-	map<basic_block_t *, ref_code_t *, bb_cmp_t> out_refs;
-	multimap<basic_block_t *, ref_data_t *, bb_cmp_t> data_refs;
+	std::map<basic_block_t *, ref_code_t *, bb_cmp_t> in_refs;
+	std::map<basic_block_t *, ref_code_t *, bb_cmp_t> out_refs;
+	std::multimap<basic_block_t *, ref_data_t *, bb_cmp_t> data_refs;
 } bb_code_t;
 
 typedef struct {
-	multimap<basic_block_t *, ref_data_t *, bb_cmp_t> data_refs;
+	std::multimap<basic_block_t *, ref_data_t *, bb_cmp_t> data_refs;
 } bb_data_t;
 
 typedef enum {
@@ -61,8 +59,8 @@ struct basic_block {
 };
 
 
-int basicblock_analysis(map<arm_addr_t, basic_block_t *> *bb_map,
-			set<arm_addr_t> *entrypoints, image_t *image);
+int basicblock_analysis(std::map<arm_addr_t, basic_block_t *> *bb_map,
+			std::set<arm_addr_t> *entrypoints, image_t *image);
 
 
 #endif /* ! _BASICBLOCK_HH */

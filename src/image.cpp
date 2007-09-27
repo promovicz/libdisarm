@@ -130,11 +130,13 @@ image_remove_mapping(image_t *image, arm_addr_t addr)
 {
 	map<arm_addr_t, image_mapping_t *>::iterator mapping_iter;
 
-	mapping_iter = image->mappings.lower_bound(addr);
+	mapping_iter = image->mappings.upper_bound(addr);
 	if (mapping_iter != image->mappings.begin()) {
 		image_mapping_t *mapping = (--mapping_iter)->second;
-		image_free_mapping(mapping);
-		image->mappings.erase(mapping_iter);
+		if (addr < mapping->addr + mapping->size) {
+			image_free_mapping(mapping);
+			image->mappings.erase(mapping_iter);
+		}
 	}
 }
 
@@ -143,10 +145,12 @@ image_find_mapping(image_t *image, arm_addr_t addr)
 {
 	map<arm_addr_t, image_mapping_t *>::iterator mapping_iter;
 
-	mapping_iter = image->mappings.lower_bound(addr);
+	mapping_iter = image->mappings.upper_bound(addr);
 	if (mapping_iter != image->mappings.begin()) {
 		image_mapping_t *mapping = (--mapping_iter)->second;
-		return mapping;
+		if (addr < mapping->addr + mapping->size) {
+			return mapping;
+		}
 	}	
 
 	return NULL;
