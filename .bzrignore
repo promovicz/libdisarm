@@ -16,5 +16,3 @@ Makefile.in
 ./missing
 ./libtool
 ./ltmain.sh
-
-./disarm

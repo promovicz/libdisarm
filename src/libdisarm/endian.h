@@ -1,5 +1,5 @@
 /*
- * endian.hh - Endianness conversion header (C++)
+ * endian.h - Endianness conversion header
  *
  * Copyright (C) 2007  Jon Lund Steffensen <jonlst@gmail.com>
  *
@@ -18,16 +18,21 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#ifndef _DISASM_ENDIAN_H
-#define _DISASM_ENDIAN_H
+#ifndef _LIBDISARM_ENDIAN_H
+#define _LIBDISARM_ENDIAN_H
 
-#ifdef HAVE_SYS_ENDIAN_H
+
+#if defined(__FreeBSD__) && defined(HAVE_SYS_ENDIAN_H)
 # include <sys/endian.h>
-#else /* ! HAVE_SYS_ENDIAN_H */
+#else
 
 # ifdef HAVE_CONFIG_H
 #  include <config.h>
 # endif
+
+# include <stdio.h>
+# include <stdlib.h>
+# include <stdint.h>
 
 # ifdef HAVE_BYTESWAP_H
 #  include <byteswap.h>
@@ -80,4 +85,4 @@
 #endif /* HAVE_SYS_ENDIAN_H */
 
 
-#endif /* ! _DISASM_ENDIAN_H */
+#endif /* ! _LIBDISARM_ENDIAN_H */
