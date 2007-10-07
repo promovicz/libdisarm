@@ -1,4 +1,4 @@
-Use the following steps to compile disarm:
+Use the following steps to compile libdisarm:
 1) ./bootstrap
 2) ./configure
 3) make
