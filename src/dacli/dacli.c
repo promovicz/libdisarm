@@ -174,11 +174,13 @@ main(int argc, char *argv[])
 		}
 		
 		da_instr_t instr;
+		da_instr_args_t args;
 		da_instr_parse(&instr, data, big_endian);
+		da_instr_parse_args(&args, &instr);
 
 		printf("%08x\t", addr);
 		printf("%08x\t", instr.data);
-		da_instr_fprint(stdout, &instr, addr);
+		da_instr_fprint(stdout, &instr, &args, addr);
 		printf("\n");
 
 		addr += sizeof(da_word_t);

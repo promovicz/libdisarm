@@ -30,15 +30,15 @@ typedef unsigned int da_uint_t;
 
 
 typedef enum {
+	/* Software breakpoint */
+	DA_GROUP_BKPT,
+
 	/* Branch and branch with link */
-	DA_GROUP_BL = 0,
+	DA_GROUP_BL,
 	/* Branch and branch with link and possible change to Thumb */
 	DA_GROUP_BLX_IMM,
 	/* Branch and link/exchange instruction set */
 	DA_GROUP_BLX_REG,
-
-	/* Software breakpoint */
-	DA_GROUP_BKPT,
 
 	/* Count leading zeros */
 	DA_GROUP_CLZ,

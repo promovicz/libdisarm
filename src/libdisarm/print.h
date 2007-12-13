@@ -27,7 +27,8 @@
 
 DA_BEGIN_DECLS
 
-void da_instr_fprint(FILE *f, const da_instr_t *instr, da_addr_t addr);
+void da_instr_fprint(FILE *f, const da_instr_t *instr,
+		     const da_instr_args_t *args, da_addr_t addr);
 
 DA_END_DECLS
 
