@@ -12,6 +12,8 @@ AC_SUBST(LIBDISARM_VERSION_INFO, [0:0:0])
 
 # Checks for programs.
 AC_PROG_CC
+AX_CFLAGS_GCC_OPTION([-Wswitch])
+
 AC_PROG_LIBTOOL
 
 # Checks for libraries.

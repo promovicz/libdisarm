@@ -108,9 +108,7 @@ typedef enum {
 	/* Undefined instruction group #4 */
 	DA_GROUP_UNDEF_4,
 	/* Undefined instruction group #5 */
-	DA_GROUP_UNDEF_5,
-
-	DA_GROUP_MAX
+	DA_GROUP_UNDEF_5
 } da_group_t;
 
 
