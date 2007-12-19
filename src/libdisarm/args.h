@@ -36,8 +36,7 @@ DA_BEGIN_DECLS
 
 typedef struct {
 	da_cond_t cond;
-	da_uint_t imm_hi;
-	da_uint_t imm_lo;
+	da_uint_t imm;
 } da_args_bkpt_t;
 
 typedef struct {
@@ -76,7 +75,7 @@ typedef struct {
 typedef struct {
 	da_cond_t cond;
 	da_uint_t p;
-	da_uint_t unsign;
+	da_uint_t sign;
 	da_uint_t n;
 	da_uint_t write;
 	da_uint_t load;
@@ -103,7 +102,6 @@ typedef struct {
 	da_uint_t flags;
 	da_reg_t rn;
 	da_reg_t rd;
-	da_uint_t rot;
 	da_uint_t imm;
 } da_args_data_imm_t;
 
@@ -151,60 +149,55 @@ typedef struct {
 typedef struct {
 	da_cond_t cond;
 	da_uint_t p;
-	da_uint_t unsign;
 	da_uint_t write;
 	da_reg_t rn;
 	da_reg_t rd;
-	da_uint_t off_hi;
 	da_uint_t hword;
-	da_uint_t off_lo;
-} da_args_l_sign_imm_off_t;
+	int off;
+} da_args_l_sign_imm_t;
 
 typedef struct {
 	da_cond_t cond;
 	da_uint_t p;
-	da_uint_t unsign;
+	da_uint_t sign;
 	da_uint_t write;
 	da_reg_t rn;
 	da_reg_t rd;
 	da_uint_t hword;
 	da_reg_t rm;
-} da_args_l_sign_reg_off_t;
+} da_args_l_sign_reg_t;
 
 typedef struct {
 	da_cond_t cond;
 	da_uint_t p;
-	da_uint_t unsign;
 	da_uint_t write;
 	da_uint_t load;
 	da_reg_t rn;
 	da_reg_t rd;
-	da_uint_t off_hi;
-	da_uint_t off_lo;
-} da_args_ls_hw_imm_off_t;
+	int off;
+} da_args_ls_hw_imm_t;
 
 typedef struct {
 	da_cond_t cond;
 	da_uint_t p;
-	da_uint_t unsign;
+	da_uint_t sign;
 	da_uint_t write;
 	da_uint_t load;
 	da_reg_t rn;
 	da_reg_t rd;
 	da_reg_t rm;
-} da_args_ls_hw_reg_off_t;
+} da_args_ls_hw_reg_t;
 
 typedef struct {
 	da_cond_t cond;
 	da_uint_t p;
-	da_uint_t unsign;
 	da_uint_t byte;
 	da_uint_t w;
 	da_uint_t load;
 	da_reg_t rn;
 	da_reg_t rd;
-	da_uint_t imm;
-} da_args_ls_imm_off_t;
+	int off;
+} da_args_ls_imm_t;
 
 typedef struct {
 	da_cond_t cond;
@@ -220,7 +213,7 @@ typedef struct {
 typedef struct {
 	da_cond_t cond;
 	da_uint_t p;
-	da_uint_t unsign;
+	da_uint_t sign;
 	da_uint_t byte;
 	da_uint_t write;
 	da_uint_t load;
@@ -229,30 +222,28 @@ typedef struct {
 	da_uint_t sha;
 	da_shift_t sh;
 	da_reg_t rm;
-} da_args_ls_reg_off_t;
+} da_args_ls_reg_t;
 
 typedef struct {
 	da_cond_t cond;
 	da_uint_t p;
-	da_uint_t unsign;
 	da_uint_t write;
 	da_reg_t rn;
 	da_reg_t rd;
-	da_uint_t off_hi;
 	da_uint_t store;
-	da_uint_t off_lo;
-} da_args_ls_two_imm_off_t;
+	int off;
+} da_args_ls_two_imm_t;
 
 typedef struct {
 	da_cond_t cond;
 	da_uint_t p;
-	da_uint_t unsign;
+	da_uint_t sign;
 	da_uint_t write;
 	da_reg_t rn;
 	da_reg_t rd;
 	da_uint_t store;
 	da_reg_t rm;
-} da_args_ls_two_reg_off_t;
+} da_args_ls_two_reg_t;
 
 typedef struct {
 	da_cond_t cond;
@@ -271,7 +262,6 @@ typedef struct {
 	da_cond_t cond;
 	da_uint_t r;
 	da_uint_t mask;
-	da_uint_t rot;
 	da_uint_t imm;
 } da_args_msr_imm_t;
 
@@ -325,15 +315,15 @@ typedef struct {
 		da_args_data_reg_sh_t data_reg_sh;
 		da_args_dsp_add_sub_t dsp_add_sub;
 		da_args_dsp_mul_t dsp_mul;
-		da_args_l_sign_imm_off_t l_sign_imm_off;
-		da_args_l_sign_reg_off_t l_sign_reg_off;
-		da_args_ls_hw_imm_off_t ls_hw_imm_off;
-		da_args_ls_hw_reg_off_t ls_hw_reg_off;
-		da_args_ls_imm_off_t ls_imm_off;
+		da_args_l_sign_imm_t l_sign_imm;
+		da_args_l_sign_reg_t l_sign_reg;
+		da_args_ls_hw_imm_t ls_hw_imm;
+		da_args_ls_hw_reg_t ls_hw_reg;
+		da_args_ls_imm_t ls_imm;
 		da_args_ls_multi_t ls_multi;
-		da_args_ls_reg_off_t ls_reg_off;
-		da_args_ls_two_imm_off_t ls_two_imm_off;
-		da_args_ls_two_reg_off_t ls_two_reg_off;
+		da_args_ls_reg_t ls_reg;
+		da_args_ls_two_imm_t ls_two_imm;
+		da_args_ls_two_reg_t ls_two_reg;
 		da_args_mrs_t mrs;
 		da_args_msr_t msr;
 		da_args_msr_imm_t msr_imm;

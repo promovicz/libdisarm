@@ -31,7 +31,7 @@ typedef unsigned int da_uint_t;
 
 typedef enum {
 	/* Software breakpoint */
-	DA_GROUP_BKPT,
+	DA_GROUP_BKPT = 0,
 
 	/* Branch and branch with link */
 	DA_GROUP_BL,
@@ -63,23 +63,23 @@ typedef enum {
 	DA_GROUP_DSP_MUL,
 
 	/* Load signed halfword/byte immediate offset */
-	DA_GROUP_L_SIGN_IMM_OFF,
+	DA_GROUP_L_SIGN_IMM,
 	/* Load signed halfword/byte register offset */
-	DA_GROUP_L_SIGN_REG_OFF,
+	DA_GROUP_L_SIGN_REG,
 	/* Load/store halfword immediate offset */
-	DA_GROUP_LS_HW_IMM_OFF,
+	DA_GROUP_LS_HW_IMM,
 	/* Load/store halfword register offset */
-	DA_GROUP_LS_HW_REG_OFF,
+	DA_GROUP_LS_HW_REG,
 	/* Load/store immediate offset */
-	DA_GROUP_LS_IMM_OFF,
+	DA_GROUP_LS_IMM,
 	/* Load/store multiple */
 	DA_GROUP_LS_MULTI,
 	/* Load/store register offset */
-	DA_GROUP_LS_REG_OFF,
+	DA_GROUP_LS_REG,
 	/* Load/store two words immediate offset */
-	DA_GROUP_LS_TWO_IMM_OFF,
+	DA_GROUP_LS_TWO_IMM,
 	/* Load/store two words register offset */
-	DA_GROUP_LS_TWO_REG_OFF,
+	DA_GROUP_LS_TWO_REG,
 
 	/* Move status register to register */
 	DA_GROUP_MRS,
@@ -108,7 +108,9 @@ typedef enum {
 	/* Undefined instruction group #4 */
 	DA_GROUP_UNDEF_4,
 	/* Undefined instruction group #5 */
-	DA_GROUP_UNDEF_5
+	DA_GROUP_UNDEF_5,
+
+	DA_GROUP_MAX
 } da_group_t;
 
 

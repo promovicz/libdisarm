@@ -71,8 +71,8 @@ da_instr_parse_args(da_instr_args_t *args, const da_instr_t *instr)
 	switch (instr->group) {
 	case DA_GROUP_BKPT:
 		args->bkpt.cond = DA_ARG_COND(instr, 28);
-		args->bkpt.imm_hi = DA_ARG(instr, 8, 0xfff);
-		args->bkpt.imm_lo = DA_ARG(instr, 0, 0xf);
+		args->bkpt.imm = (DA_ARG(instr, 8, 0xfff) << 4) |
+			DA_ARG(instr, 0, 0xf);
 		break;
 	case DA_GROUP_BL:
 		args->bl.cond = DA_ARG_COND(instr, 28);
@@ -105,7 +105,7 @@ da_instr_parse_args(da_instr_args_t *args, const da_instr_t *instr)
 	case DA_GROUP_CP_LS:
 		args->cp_ls.cond = DA_ARG_COND(instr, 28);
 		args->cp_ls.p = DA_ARG_BOOL(instr, 24);
-		args->cp_ls.unsign = DA_ARG_BOOL(instr, 23);
+		args->cp_ls.sign = DA_ARG_BOOL(instr, 23);
 		args->cp_ls.n = DA_ARG_BOOL(instr, 22);
 		args->cp_ls.write = DA_ARG_BOOL(instr, 21);
 		args->cp_ls.load = DA_ARG_BOOL(instr, 20);
@@ -130,8 +130,10 @@ da_instr_parse_args(da_instr_args_t *args, const da_instr_t *instr)
 		args->data_imm.flags = DA_ARG_BOOL(instr, 20);
 		args->data_imm.rn = DA_ARG_REG(instr, 16);
 		args->data_imm.rd = DA_ARG_REG(instr, 12);
-		args->data_imm.rot = DA_ARG(instr, 8, 0xf);
-		args->data_imm.imm = DA_ARG(instr, 0, 0xff);
+		args->data_imm.imm = (DA_ARG(instr, 0, 0xff) >>
+				      (DA_ARG(instr, 8, 0xf) << 1)) |
+			(DA_ARG(instr, 0, 0xff) <<
+			 (32 - (DA_ARG(instr, 8, 0xf) << 1)));
 		break;
 	case DA_GROUP_DATA_IMM_SH:
 		args->data_imm_sh.cond = DA_ARG_COND(instr, 28);
@@ -170,58 +172,56 @@ da_instr_parse_args(da_instr_args_t *args, const da_instr_t *instr)
 		args->dsp_mul.x = DA_ARG_BOOL(instr, 5);
 		args->dsp_mul.rm = DA_ARG_REG(instr, 0);
 		break;
-	case DA_GROUP_L_SIGN_IMM_OFF:
-		args->l_sign_imm_off.cond = DA_ARG_COND(instr, 28);
-		args->l_sign_imm_off.p = DA_ARG_BOOL(instr, 24);
-		args->l_sign_imm_off.unsign = DA_ARG_BOOL(instr, 23);
-		args->l_sign_imm_off.write = DA_ARG_BOOL(instr, 21);
-		args->l_sign_imm_off.rn = DA_ARG_REG(instr, 16);
-		args->l_sign_imm_off.rd = DA_ARG_REG(instr, 12);
-		args->l_sign_imm_off.off_hi = DA_ARG(instr, 8, 0xf);
-		args->l_sign_imm_off.hword = DA_ARG_BOOL(instr, 5);
-		args->l_sign_imm_off.off_lo = DA_ARG(instr, 0, 0xf);
+	case DA_GROUP_L_SIGN_IMM:
+		args->l_sign_imm.cond = DA_ARG_COND(instr, 28);
+		args->l_sign_imm.p = DA_ARG_BOOL(instr, 24);
+		args->l_sign_imm.write = DA_ARG_BOOL(instr, 21);
+		args->l_sign_imm.rn = DA_ARG_REG(instr, 16);
+		args->l_sign_imm.rd = DA_ARG_REG(instr, 12);
+		args->l_sign_imm.hword = DA_ARG_BOOL(instr, 5);
+		args->l_sign_imm.off = (DA_ARG_BOOL(instr, 23) ? 1 : -1) *
+			((DA_ARG(instr, 8, 0xf) << 4) | DA_ARG(instr, 0, 0xf));
 		break;
-	case DA_GROUP_L_SIGN_REG_OFF:
-		args->l_sign_reg_off.cond = DA_ARG_COND(instr, 28);
-		args->l_sign_reg_off.p = DA_ARG_BOOL(instr, 24);
-		args->l_sign_reg_off.unsign = DA_ARG_BOOL(instr, 23);
-		args->l_sign_reg_off.write = DA_ARG_BOOL(instr, 21);
-		args->l_sign_reg_off.rn = DA_ARG_REG(instr, 16);
-		args->l_sign_reg_off.rd = DA_ARG_REG(instr, 12);
-		args->l_sign_reg_off.hword = DA_ARG_BOOL(instr, 5);
-		args->l_sign_reg_off.rm = DA_ARG_REG(instr, 0);
+	case DA_GROUP_L_SIGN_REG:
+		args->l_sign_reg.cond = DA_ARG_COND(instr, 28);
+		args->l_sign_reg.p = DA_ARG_BOOL(instr, 24);
+		args->l_sign_reg.sign = DA_ARG_BOOL(instr, 23);
+		args->l_sign_reg.write = DA_ARG_BOOL(instr, 21);
+		args->l_sign_reg.rn = DA_ARG_REG(instr, 16);
+		args->l_sign_reg.rd = DA_ARG_REG(instr, 12);
+		args->l_sign_reg.hword = DA_ARG_BOOL(instr, 5);
+		args->l_sign_reg.rm = DA_ARG_REG(instr, 0);
 		break;
-	case DA_GROUP_LS_HW_IMM_OFF:
-		args->ls_hw_imm_off.cond = DA_ARG_COND(instr, 28);
-		args->ls_hw_imm_off.p = DA_ARG_BOOL(instr, 24);
-		args->ls_hw_imm_off.unsign = DA_ARG_BOOL(instr, 23);
-		args->ls_hw_imm_off.write = DA_ARG_BOOL(instr, 21);
-		args->ls_hw_imm_off.load = DA_ARG_BOOL(instr, 20);
-		args->ls_hw_imm_off.rn = DA_ARG_REG(instr, 16);
-		args->ls_hw_imm_off.rd = DA_ARG_REG(instr, 12);
-		args->ls_hw_imm_off.off_hi = DA_ARG(instr, 8, 0xf);
-		args->ls_hw_imm_off.off_lo = DA_ARG(instr, 0, 0xf);
+	case DA_GROUP_LS_HW_IMM:
+		args->ls_hw_imm.cond = DA_ARG_COND(instr, 28);
+		args->ls_hw_imm.p = DA_ARG_BOOL(instr, 24);
+		args->ls_hw_imm.write = DA_ARG_BOOL(instr, 21);
+		args->ls_hw_imm.load = DA_ARG_BOOL(instr, 20);
+		args->ls_hw_imm.rn = DA_ARG_REG(instr, 16);
+		args->ls_hw_imm.rd = DA_ARG_REG(instr, 12);
+		args->ls_hw_imm.off = (DA_ARG_BOOL(instr, 23) ? 1 : -1) *
+			((DA_ARG(instr, 8, 0xf) << 4) | DA_ARG(instr, 0, 0xf));
 		break;
-	case DA_GROUP_LS_HW_REG_OFF:
-		args->ls_hw_reg_off.cond = DA_ARG_COND(instr, 28);
-		args->ls_hw_reg_off.p = DA_ARG_BOOL(instr, 24);
-		args->ls_hw_reg_off.unsign = DA_ARG_BOOL(instr, 23);
-		args->ls_hw_reg_off.write = DA_ARG_BOOL(instr, 21);
-		args->ls_hw_reg_off.load = DA_ARG_BOOL(instr, 20);
-		args->ls_hw_reg_off.rn = DA_ARG_REG(instr, 16);
-		args->ls_hw_reg_off.rd = DA_ARG_REG(instr, 12);
-		args->ls_hw_reg_off.rm = DA_ARG_REG(instr,  0);
+	case DA_GROUP_LS_HW_REG:
+		args->ls_hw_reg.cond = DA_ARG_COND(instr, 28);
+		args->ls_hw_reg.p = DA_ARG_BOOL(instr, 24);
+		args->ls_hw_reg.sign = DA_ARG_BOOL(instr, 23);
+		args->ls_hw_reg.write = DA_ARG_BOOL(instr, 21);
+		args->ls_hw_reg.load = DA_ARG_BOOL(instr, 20);
+		args->ls_hw_reg.rn = DA_ARG_REG(instr, 16);
+		args->ls_hw_reg.rd = DA_ARG_REG(instr, 12);
+		args->ls_hw_reg.rm = DA_ARG_REG(instr,  0);
 		break;
-	case DA_GROUP_LS_IMM_OFF:
-		args->ls_imm_off.cond = DA_ARG_COND(instr, 28);
-		args->ls_imm_off.p = DA_ARG_BOOL(instr, 24);
-		args->ls_imm_off.unsign = DA_ARG_BOOL(instr, 23);
-		args->ls_imm_off.byte = DA_ARG_BOOL(instr, 22);
-		args->ls_imm_off.w = DA_ARG_BOOL(instr, 21);
-		args->ls_imm_off.load = DA_ARG_BOOL(instr, 20);
-		args->ls_imm_off.rn = DA_ARG_REG(instr, 16);
-		args->ls_imm_off.rd = DA_ARG_REG(instr, 12);
-		args->ls_imm_off.imm = DA_ARG(instr, 0, 0xfff);
+	case DA_GROUP_LS_IMM:
+		args->ls_imm.cond = DA_ARG_COND(instr, 28);
+		args->ls_imm.p = DA_ARG_BOOL(instr, 24);
+		args->ls_imm.byte = DA_ARG_BOOL(instr, 22);
+		args->ls_imm.w = DA_ARG_BOOL(instr, 21);
+		args->ls_imm.load = DA_ARG_BOOL(instr, 20);
+		args->ls_imm.rn = DA_ARG_REG(instr, 16);
+		args->ls_imm.rd = DA_ARG_REG(instr, 12);
+		args->ls_imm.off = (DA_ARG_BOOL(instr, 23) ? 1 : -1) *
+			DA_ARG(instr, 0, 0xfff);
 		break;
 	case DA_GROUP_LS_MULTI:
 		args->ls_multi.cond = DA_ARG_COND(instr, 28);
@@ -233,39 +233,38 @@ da_instr_parse_args(da_instr_args_t *args, const da_instr_t *instr)
 		args->ls_multi.rn = DA_ARG_REG(instr, 16);
 		args->ls_multi.reglist = DA_ARG(instr, 0, 0xffff);
 		break;
-	case DA_GROUP_LS_REG_OFF:
-		args->ls_reg_off.cond = DA_ARG_COND(instr, 28);
-		args->ls_reg_off.p = DA_ARG_BOOL(instr, 24);
-		args->ls_reg_off.unsign = DA_ARG_BOOL(instr, 23);
-		args->ls_reg_off.byte = DA_ARG_BOOL(instr, 22);
-		args->ls_reg_off.write = DA_ARG_BOOL(instr, 21);
-		args->ls_reg_off.load = DA_ARG_BOOL(instr, 20);
-		args->ls_reg_off.rn = DA_ARG_REG(instr, 16);
-		args->ls_reg_off.rd = DA_ARG_REG(instr, 12);
-		args->ls_reg_off.sha = DA_ARG(instr, 7, 0x1f);
-		args->ls_reg_off.sh = DA_ARG_SHIFT(instr, 5);
-		args->ls_reg_off.rm = DA_ARG_REG(instr, 0);
+	case DA_GROUP_LS_REG:
+		args->ls_reg.cond = DA_ARG_COND(instr, 28);
+		args->ls_reg.p = DA_ARG_BOOL(instr, 24);
+		args->ls_reg.sign = DA_ARG_BOOL(instr, 23);
+		args->ls_reg.byte = DA_ARG_BOOL(instr, 22);
+		args->ls_reg.write = DA_ARG_BOOL(instr, 21);
+		args->ls_reg.load = DA_ARG_BOOL(instr, 20);
+		args->ls_reg.rn = DA_ARG_REG(instr, 16);
+		args->ls_reg.rd = DA_ARG_REG(instr, 12);
+		args->ls_reg.sha = DA_ARG(instr, 7, 0x1f);
+		args->ls_reg.sh = DA_ARG_SHIFT(instr, 5);
+		args->ls_reg.rm = DA_ARG_REG(instr, 0);
 		break;
-	case DA_GROUP_LS_TWO_IMM_OFF:
-		args->ls_two_imm_off.cond = DA_ARG_COND(instr, 28);
-		args->ls_two_imm_off.p = DA_ARG_BOOL(instr, 24);
-		args->ls_two_imm_off.unsign = DA_ARG_BOOL(instr, 23);
-		args->ls_two_imm_off.write = DA_ARG_BOOL(instr, 21);
-		args->ls_two_imm_off.rn = DA_ARG_REG(instr, 16);
-		args->ls_two_imm_off.rd = DA_ARG_REG(instr, 12);
-		args->ls_two_imm_off.off_hi = DA_ARG(instr, 8, 0xf);
-		args->ls_two_imm_off.store = DA_ARG_BOOL(instr, 5);
-		args->ls_two_imm_off.off_lo = DA_ARG(instr, 0, 0xf);
+	case DA_GROUP_LS_TWO_IMM:
+		args->ls_two_imm.cond = DA_ARG_COND(instr, 28);
+		args->ls_two_imm.p = DA_ARG_BOOL(instr, 24);
+		args->ls_two_imm.write = DA_ARG_BOOL(instr, 21);
+		args->ls_two_imm.rn = DA_ARG_REG(instr, 16);
+		args->ls_two_imm.rd = DA_ARG_REG(instr, 12);
+		args->ls_two_imm.store = DA_ARG_BOOL(instr, 5);
+		args->ls_two_imm.off = (DA_ARG_BOOL(instr, 23) ? 1 : -1) *
+			((DA_ARG(instr, 8, 0xf) << 4) | DA_ARG(instr, 0, 0xf));
 		break;
-	case DA_GROUP_LS_TWO_REG_OFF:
-		args->ls_two_reg_off.cond = DA_ARG_COND(instr, 28);
-		args->ls_two_reg_off.p = DA_ARG_BOOL(instr, 24);
-		args->ls_two_reg_off.unsign = DA_ARG_BOOL(instr, 23);
-		args->ls_two_reg_off.write = DA_ARG_BOOL(instr, 21);
-		args->ls_two_reg_off.rn = DA_ARG_REG(instr, 16);
-		args->ls_two_reg_off.rd = DA_ARG_REG(instr, 12);
-		args->ls_two_reg_off.store = DA_ARG_BOOL(instr, 5);
-		args->ls_two_reg_off.rm = DA_ARG_REG(instr, 0);
+	case DA_GROUP_LS_TWO_REG:
+		args->ls_two_reg.cond = DA_ARG_COND(instr, 28);
+		args->ls_two_reg.p = DA_ARG_BOOL(instr, 24);
+		args->ls_two_reg.sign = DA_ARG_BOOL(instr, 23);
+		args->ls_two_reg.write = DA_ARG_BOOL(instr, 21);
+		args->ls_two_reg.rn = DA_ARG_REG(instr, 16);
+		args->ls_two_reg.rd = DA_ARG_REG(instr, 12);
+		args->ls_two_reg.store = DA_ARG_BOOL(instr, 5);
+		args->ls_two_reg.rm = DA_ARG_REG(instr, 0);
 		break;
 	case DA_GROUP_MRS:
 		args->mrs.cond = DA_ARG_COND(instr, 28);
@@ -282,8 +281,10 @@ da_instr_parse_args(da_instr_args_t *args, const da_instr_t *instr)
 		args->msr_imm.cond = DA_ARG_COND(instr, 28);
 		args->msr_imm.r = DA_ARG_BOOL(instr, 22);
 		args->msr_imm.mask = DA_ARG(instr, 16, 0xf);
-		args->msr_imm.rot = DA_ARG(instr, 8, 0xf);
-		args->msr_imm.imm = DA_ARG(instr, 0, 0xff);
+		args->msr_imm.imm = (DA_ARG(instr, 0, 0xff) >>
+				     (DA_ARG(instr, 8, 0xf) << 1)) |
+			(DA_ARG(instr, 0, 0xff) <<
+			 (32 - (DA_ARG(instr, 8, 0xf) << 1)));
 		break;
 	case DA_GROUP_MUL:
 		args->mul.cond = DA_ARG_COND(instr, 28);

@@ -85,9 +85,7 @@ static void
 da_instr_fprint_bkpt(FILE *f, const da_instr_t *instr,
 		     const da_args_bkpt_t *args, da_addr_t addr)
 {
-	fprintf(f, "bkpt%s\t0x%x", da_cond_map[args->cond],
-		((args->imm_hi & 0xfff) << 4) |
-		(args->imm_lo & 0xf));
+	fprintf(f, "bkpt%s\t0x%x", da_cond_map[args->cond], args->imm);
 }
 
 static void
@@ -143,10 +141,10 @@ da_instr_fprint_cp_ls(FILE *f, const da_instr_t *instr,
 
 	if (!args->p) fprintf(f, "]");
 
-	if (!(args->unsign || args->p)) {
+	if (!(args->sign || args->p)) {
 		fprintf(f, ", {%d}", args->imm);
 	} else if (args->imm > 0) {
-		fprintf(f, ", #%s0x%x", (args->unsign ? "" : "-"),
+		fprintf(f, ", #%s0x%x", (args->sign ? "" : "-"),
 			(args->imm << 2));
 	}
 
@@ -181,16 +179,13 @@ da_instr_fprint_data_imm(FILE *f, const da_instr_t *instr,
 		fprintf(f, "r%d, r%d", args->rd, args->rn);
 	}
 
-	da_uint_t rot_imm = (args->imm >> (args->rot << 1)) |
-		(args->imm << (32 - (args->rot << 1)));
-	
-	fprintf(f, ", #0x%x", rot_imm);
+	fprintf(f, ", #0x%x", args->imm);
 
 	if (args->rn == DA_REG_R15) {
 		if (args->op == DA_DATA_OP_ADD) {
-			fprintf(f, "\t; 0x%x", addr + 8 + rot_imm);
+			fprintf(f, "\t; 0x%x", addr + 8 + args->imm);
 		} else if (args->op == DA_DATA_OP_SUB) {
-			fprintf(f, "\t; 0x%x", addr + 8 - rot_imm);
+			fprintf(f, "\t; 0x%x", addr + 8 - args->imm);
 		}
 	}
 }
@@ -288,86 +283,78 @@ da_instr_fprint_dsp_mul(FILE *f, const da_instr_t *instr,
 }
 
 static void
-da_instr_fprint_l_sign_imm_off(FILE *f, const da_instr_t *instr,
-			       const da_args_l_sign_imm_off_t *args,
-			       da_addr_t addr)
+da_instr_fprint_l_sign_imm(FILE *f, const da_instr_t *instr,
+			   const da_args_l_sign_imm_t *args, da_addr_t addr)
 {
 	fprintf(f, "ldr%ss%s\tr%d, [r%d", da_cond_map[args->cond],
 		(args->hword ? "h" : "b"), args->rd, args->rn);
 
 	if (!args->p) fprintf(f, "]");
 
-	if (args->off_hi || args->off_lo) {
-		da_uint_t off = (args->off_hi << 4) | args->off_lo;
-		fprintf(f, ", #%s0x%x", (args->unsign ? "" : "-"), off);
+	if (args->off != 0) {
+		fprintf(f, ", #%s0x%x", (args->off < 0 ? "-" : ""),
+			abs(args->off));
 	}
 
 	if (args->p) fprintf(f, "]%s", (args->write ? "!" : ""));
 
 	if (args->rn == DA_REG_R15) {
-		da_uint_t off = ((args->off_hi << 4) | args->off_lo) *
-			(args->unsign ? 1 : -1);
-		fprintf(f, "\t; 0x%x", addr + 8 + off);
+		fprintf(f, "\t; 0x%x", addr + 8 + args->off);
 	}
 }
 
 static void
-da_instr_fprint_l_sign_reg_off(FILE *f, const da_instr_t *instr,
-			       const da_args_l_sign_reg_off_t *args,
-			       da_addr_t addr)
+da_instr_fprint_l_sign_reg(FILE *f, const da_instr_t *instr,
+			   const da_args_l_sign_reg_t *args, da_addr_t addr)
 {
 	fprintf(f, "ldr%ss%s\tr%d, [r%d", da_cond_map[args->cond],
 		(args->hword ? "h" : "b"), args->rd, args->rn);
 
 	if (!args->p) fprintf(f, "]");
 
-	fprintf(f, ", %sr%d", (args->unsign ? "" : "-"), args->rm);
+	fprintf(f, ", %sr%d", (args->sign ? "" : "-"), args->rm);
 
 	if (args->p) fprintf(f, "]%s", (args->write ? "!" : ""));
 }
 
 static void
-da_instr_fprint_ls_hw_imm_off(FILE *f, const da_instr_t *instr,
-			      const da_args_ls_hw_imm_off_t *args,
-			      da_addr_t addr)
+da_instr_fprint_ls_hw_imm(FILE *f, const da_instr_t *instr,
+			  const da_args_ls_hw_imm_t *args, da_addr_t addr)
 {
 	fprintf(f, "%sr%sh\tr%d, [r%d", (args->load ? "ld" : "st"),
 		da_cond_map[args->cond], args->rd, args->rn);
 
 	if (!args->p) fprintf(f, "]");
 
-	if (args->off_hi || args->off_lo) {
-		da_uint_t off = (args->off_hi << 4) | args->off_lo;
-		fprintf(f, ", #%s0x%x", (args->unsign ? "" : "-"), off);
+	if (args->off != 0) {
+		fprintf(f, ", #%s0x%x", (args->off < 0 ? "-" : ""),
+			abs(args->off));
 	}
 
 	if (args->p) fprintf(f, "]%s", (args->write ? "!" : ""));
 
 	if (args->rn == DA_REG_R15) {
-		da_uint_t off = ((args->off_hi << 4) | args->off_lo) *
-			(args->unsign ? 1 : -1);
-		fprintf(f, "\t; 0x%x", addr + 8 + off);
+		fprintf(f, "\t; 0x%x", addr + 8 + args->off);
 	}
 }
 
 static void
-da_instr_fprint_ls_hw_reg_off(FILE *f, const da_instr_t *instr,
-			      const da_args_ls_hw_reg_off_t *args,
-			      da_addr_t addr)
+da_instr_fprint_ls_hw_reg(FILE *f, const da_instr_t *instr,
+			  const da_args_ls_hw_reg_t *args, da_addr_t addr)
 {
 	fprintf(f, "%sr%sh\tr%d, [r%d", (args->load ? "ld" : "st"),
 		da_cond_map[args->cond], args->rd, args->rn);
 
 	if (!args->p) fprintf(f, "]");
 
-	fprintf(f, ", %sr%d", (args->unsign ? "" : "-"), args->rm);
+	fprintf(f, ", %sr%d", (args->sign ? "" : "-"), args->rm);
 
 	if (args->p) fprintf(f, "]%s", (args->write ? "!" : ""));
 }
 
 static void
-da_instr_fprint_ls_imm_off(FILE *f, const da_instr_t *instr,
-			   const da_args_ls_imm_off_t *args, da_addr_t addr)
+da_instr_fprint_ls_imm(FILE *f, const da_instr_t *instr,
+		       const da_args_ls_imm_t *args, da_addr_t addr)
 {
 	fprintf(f, "%sr%s%s%s\tr%d, [r%d", (args->load ? "ld" : "st"),
 		da_cond_map[args->cond], (args->byte ? "b" : ""),
@@ -375,15 +362,15 @@ da_instr_fprint_ls_imm_off(FILE *f, const da_instr_t *instr,
 
 	if (!args->p) fprintf(f, "]");
 
-	if (args->imm > 0) {
-		fprintf(f, ", #%s0x%x", (args->unsign ? "" : "-"), args->imm);
+	if (args->off != 0) {
+		fprintf(f, ", #%s0x%x", (args->off < 0 ? "-" : ""),
+			abs(args->off));
 	}
 
 	if (args->p) fprintf(f, "]%s", (args->w ? "!" : ""));
 
 	if (args->rn == DA_REG_R15) {
-		da_uint_t off = (args->unsign ? 1 : -1) * args->imm;
-		fprintf(f, "\t; 0x%x", addr + 8 + off);
+		fprintf(f, "\t; 0x%x", addr + 8 + args->off);
 	}
 }
 
@@ -401,8 +388,8 @@ da_instr_fprint_ls_multi(FILE *f, const da_instr_t *instr,
 }
 
 static void
-da_instr_fprint_ls_reg_off(FILE *f, const da_instr_t *instr,
-			   const da_args_ls_reg_off_t *args, da_addr_t addr)
+da_instr_fprint_ls_reg(FILE *f, const da_instr_t *instr,
+		       const da_args_ls_reg_t *args, da_addr_t addr)
 {
 	fprintf(f, "%sr%s%s%s\tr%d, [r%d", (args->load ? "ld" : "st"),
 		da_cond_map[args->cond], (args->byte ? "b" : ""),
@@ -410,7 +397,7 @@ da_instr_fprint_ls_reg_off(FILE *f, const da_instr_t *instr,
 
 	if (!args->p) fprintf(f, "]");
 
-	fprintf(f, ", %sr%d", (args->unsign ? "" : "-"), args->rm);
+	fprintf(f, ", %sr%d", (args->sign ? "" : "-"), args->rm);
 
 	da_uint_t sha = args->sha;
 	
@@ -428,40 +415,36 @@ da_instr_fprint_ls_reg_off(FILE *f, const da_instr_t *instr,
 }
 
 static void
-da_instr_fprint_ls_two_imm_off(FILE *f, const da_instr_t *instr,
-			       const da_args_ls_two_imm_off_t *args,
-			       da_addr_t addr)
+da_instr_fprint_ls_two_imm(FILE *f, const da_instr_t *instr,
+			   const da_args_ls_two_imm_t *args, da_addr_t addr)
 {
 	fprintf(f, "%sr%sd\tr%d, [r%d", (args->store ? "st" : "ld"),
 		da_cond_map[args->cond], args->rd, args->rn);
 
 	if (!args->p) fprintf(f, "]");
 
-	if (args->off_hi || args->off_lo) {
-		da_uint_t off = (args->off_hi << 4) | args->off_lo;
-		fprintf(f, ", #%s0x%x", (args->unsign ? "" : "-"), off);
+	if (args->off != 0) {
+		fprintf(f, ", #%s0x%x", (args->off < 0 ? "-" : ""),
+			abs(args->off));
 	}
 
 	if (args->p) fprintf(f, "]%s", (args->write ? "!" : ""));
 
 	if (args->rn == DA_REG_R15) {
-		da_uint_t off = ((args->off_hi << 4) | args->off_lo) *
-			(args->unsign ? 1 : -1);
-		fprintf(f, "\t; 0x%x", addr + 8 + off);
+		fprintf(f, "\t; 0x%x", addr + 8 + args->off);
 	}
 }
 
 static void
-da_instr_fprint_ls_two_reg_off(FILE *f, const da_instr_t *instr,
-			       const da_args_ls_two_reg_off_t *args,
-			       da_addr_t addr)
+da_instr_fprint_ls_two_reg(FILE *f, const da_instr_t *instr,
+			   const da_args_ls_two_reg_t *args, da_addr_t addr)
 {
 	fprintf(f, "%sr%sd\tr%d, [r%d", (args->store ? "st" : "ld"),
 		da_cond_map[args->cond], args->rd, args->rn);
 
 	if (!args->p) fprintf(f, "]");
 
-	fprintf(f, ", %sr%d", (args->unsign ? "" : "-"), args->rm);
+	fprintf(f, ", %sr%d", (args->sign ? "" : "-"), args->rm);
 
 	if (args->p) fprintf(f, "]%s", (args->write ? "!" : ""));
 }
@@ -490,15 +473,10 @@ static void
 da_instr_fprint_msr_imm(FILE *f, const da_instr_t *instr,
 			const da_args_msr_imm_t *args, da_addr_t addr)
 {
-	fprintf(f, "msr%s\t%s_%s%s%s%s", da_cond_map[args->cond],
+	fprintf(f, "msr%s\t%s_%s%s%s%s, #0x%x", da_cond_map[args->cond],
 		(args->r ? "SPSR" : "CPSR"), ((args->mask & 1) ? "c" : ""),
 		((args->mask & 2) ? "x" : ""), ((args->mask & 4) ? "s" : ""),
-		((args->mask & 8) ? "f" : ""));
-
-	da_uint_t rot_imm = (args->imm >> (args->rot << 1)) |
-		(args->imm << (32 - (args->rot << 1)));
-
-	fprintf(f, ", #0x%x", rot_imm);
+		((args->mask & 8) ? "f" : ""), args->imm);
 }
 
 static void
@@ -584,38 +562,32 @@ da_instr_fprint(FILE *f, const da_instr_t *instr, const da_instr_args_t *args,
 	case DA_GROUP_DSP_MUL:
 		da_instr_fprint_dsp_mul(f, instr, &args->dsp_mul, addr);
 		break;
-	case DA_GROUP_L_SIGN_IMM_OFF:
-		da_instr_fprint_l_sign_imm_off(f, instr, &args->l_sign_imm_off,
-					       addr);
+	case DA_GROUP_L_SIGN_IMM:
+		da_instr_fprint_l_sign_imm(f, instr, &args->l_sign_imm, addr);
 		break;
-	case DA_GROUP_L_SIGN_REG_OFF:
-		da_instr_fprint_l_sign_reg_off(f, instr, &args->l_sign_reg_off,
-					       addr);
+	case DA_GROUP_L_SIGN_REG:
+		da_instr_fprint_l_sign_reg(f, instr, &args->l_sign_reg, addr);
 		break;
-	case DA_GROUP_LS_HW_IMM_OFF:
-		da_instr_fprint_ls_hw_imm_off(f, instr, &args->ls_hw_imm_off,
-					      addr);
+	case DA_GROUP_LS_HW_IMM:
+		da_instr_fprint_ls_hw_imm(f, instr, &args->ls_hw_imm, addr);
 		break;
-	case DA_GROUP_LS_HW_REG_OFF:
-		da_instr_fprint_ls_hw_reg_off(f, instr, &args->ls_hw_reg_off,
-					      addr);
+	case DA_GROUP_LS_HW_REG:
+		da_instr_fprint_ls_hw_reg(f, instr, &args->ls_hw_reg, addr);
 		break;
-	case DA_GROUP_LS_IMM_OFF:
-		da_instr_fprint_ls_imm_off(f, instr, &args->ls_imm_off, addr);
+	case DA_GROUP_LS_IMM:
+		da_instr_fprint_ls_imm(f, instr, &args->ls_imm, addr);
 		break;
 	case DA_GROUP_LS_MULTI:
 		da_instr_fprint_ls_multi(f, instr, &args->ls_multi, addr);
 		break;
-	case DA_GROUP_LS_REG_OFF:
-		da_instr_fprint_ls_reg_off(f, instr, &args->ls_reg_off, addr);
+	case DA_GROUP_LS_REG:
+		da_instr_fprint_ls_reg(f, instr, &args->ls_reg, addr);
 		break;
-	case DA_GROUP_LS_TWO_IMM_OFF:
-		da_instr_fprint_ls_two_imm_off(f, instr, &args->ls_two_imm_off,
-					       addr);
+	case DA_GROUP_LS_TWO_IMM:
+		da_instr_fprint_ls_two_imm(f, instr, &args->ls_two_imm, addr);
 		break;
-	case DA_GROUP_LS_TWO_REG_OFF:
-		da_instr_fprint_ls_two_reg_off(f, instr, &args->ls_two_reg_off,
-					       addr);
+	case DA_GROUP_LS_TWO_REG:
+		da_instr_fprint_ls_two_reg(f, instr, &args->ls_two_reg, addr);
 		break;
 	case DA_GROUP_MRS:
 		da_instr_fprint_mrs(f, instr, &args->mrs, addr);

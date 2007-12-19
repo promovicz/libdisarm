@@ -38,16 +38,16 @@ da_parse_group_mul_ls(da_word_t data)
 	if ((data >> 6) & 1) {
 		if ((data >> 20) & 1) {
 			if ((data >> 22) & 1) {
-				return DA_GROUP_L_SIGN_IMM_OFF;
-			} else return DA_GROUP_L_SIGN_REG_OFF;
+				return DA_GROUP_L_SIGN_IMM;
+			} else return DA_GROUP_L_SIGN_REG;
 		} else if ((data >> 22) & 1) {
-			return DA_GROUP_LS_TWO_IMM_OFF;
-		} else return DA_GROUP_LS_TWO_REG_OFF;
+			return DA_GROUP_LS_TWO_IMM;
+		} else return DA_GROUP_LS_TWO_REG;
 	} else {
 		if ((data >> 5) & 1) {
 			if ((data >> 22) & 1) {
-				return DA_GROUP_LS_HW_IMM_OFF;
-			} else return DA_GROUP_LS_HW_REG_OFF;
+				return DA_GROUP_LS_HW_IMM;
+			} else return DA_GROUP_LS_HW_REG;
 		} else {
 			if ((data >> 24) & 1) return DA_GROUP_SWP;
 			else if ((data >> 23) & 1) {
@@ -94,10 +94,10 @@ da_parse_group_cond(da_word_t data)
 				return DA_GROUP_MSR_IMM;
 			} else return DA_GROUP_UNDEF_1;
 		} else return DA_GROUP_DATA_IMM;
-	case 2: return DA_GROUP_LS_IMM_OFF;
+	case 2: return DA_GROUP_LS_IMM;
 	case 3:
 		if ((data >> 4) & 1) return DA_GROUP_UNDEF_2;
-		else return DA_GROUP_LS_REG_OFF;
+		else return DA_GROUP_LS_REG;
 	case 4: return DA_GROUP_LS_MULTI;
 	case 5: return DA_GROUP_BL;
 	case 6: return DA_GROUP_CP_LS;
